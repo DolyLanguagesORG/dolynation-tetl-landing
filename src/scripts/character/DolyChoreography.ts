@@ -21,14 +21,12 @@ export interface ChoreographyOutput {
 type Mapping = 'forward' | 'mirror';
 
 /**
- * Traduce el progreso del scroll (0–1) en el estado de Doly.
- *
- * Regla clave del loop: Doly SIEMPRE camina de izquierda a derecha.
- *  - Bajando: entra por la izquierda → libro → sale por la derecha.
- *  - Subiendo: el recorrido se "espeja": vuelve a entrar por la izquierda → libro → sale por la derecha.
- *  - El espejo solo se activa en zonas seguras (fuera de pantalla o recostada en el libro),
- *    donde ambas versiones son visualmente idénticas → sin saltos.
- *  - Si el usuario cambia de dirección a mitad de la caminata, Doly simplemente se da la vuelta.
+ * Traduce el progreso del scroll (0–1) en el estado de Doly usando los 12 frames SVG:
+ *  - Ciclo de caminata: frames 0..11 sincronizados con el odómetro de distancia recorrida.
+ *  - Llegada al libro: Doly apoya sus patas (frame 11), sube al libro con una ligera flexión
+ *    y hace cross-fade limpio hacia la ilustración original recostada.
+ *  - Salida y loop: al levantarse retoma el ciclo de 12 frames hasta salir por la derecha,
+ *    y si el usuario hace scroll de regreso hacia arriba vuelve a entrar desde la izquierda.
  */
 export class DolyChoreography {
   private mapping: Mapping = 'forward';
@@ -45,18 +43,16 @@ export class DolyChoreography {
 
   setMetrics(m: StageMetrics) {
     this.metrics = m;
-    this.lastX = null; // evita sumar distancia por el cambio de tamaño
+    this.lastX = null;
   }
 
-  /** x del centro del cuerpo cuando está totalmente fuera de pantalla */
   private get offL() {
-    return -170 * this.metrics.k - 24;
+    return -320 * this.metrics.k - 24;
   }
   private get offR() {
-    return this.metrics.width + 170 * this.metrics.k + 24;
+    return this.metrics.width + 320 * this.metrics.k + 24;
   }
 
-  /** posición en el recorrido "forward" (izq → der) */
   private forwardX(p: number) {
     const cx = this.metrics.width / 2;
     if (p <= BEATS.walkIn[0]) return this.offL;
@@ -93,39 +89,44 @@ export class DolyChoreography {
     this.lastX = x;
 
     const walkStart = m.ranges.walk.start;
-    const walkCount = m.ranges.walk.count;
-    const settleStart = m.ranges.settle.start;
-    const settleLast = settleStart + m.ranges.settle.count - 1;
-    const hop = 26 * metrics.k;
+    const walkCount = m.ranges.walk.count; // 12 frames (d-c-01 .. d-c-12)
+    const stanceFrame = walkStart + walkCount - 1; // d-c-12 (pose estable de 4 apoyos)
+    const hop = 34 * metrics.k;
 
     let frame = walkStart + (Math.floor((this.odometer / m.strideUnits) * walkCount) % walkCount);
     let groundY = metrics.groundY;
     let alpha = 1;
     let restMix = 0;
     let shadow = 1;
+    let crouch = 0;
 
     if (inRange(p, BEATS.settle) && p > BEATS.walkIn[1]) {
       const u = norm(p, BEATS.settle);
-      frame = settleStart + Math.round(u * (settleLast - settleStart));
-      groundY = lerp(metrics.groundY, metrics.pageY, easeInOut(u)) - Math.sin(Math.PI * u) * hop;
-      shadow = 1 - u;
+      const e = easeInOut(u);
+      frame = stanceFrame;
+      groundY = lerp(metrics.groundY, metrics.pageY, e) - Math.sin(Math.PI * u) * hop;
+      crouch = e;
+      shadow = 1 - e;
     } else if (p > BEATS.settle[1] && p < BEATS.standUp[0]) {
-      frame = settleLast;
+      frame = stanceFrame;
       groundY = metrics.pageY;
+      crouch = 1;
       shadow = 0;
-      if (inRange(p, BEATS.toRest)) restMix = norm(p, BEATS.toRest);
-      else if (inRange(p, BEATS.fromRest)) restMix = 1 - norm(p, BEATS.fromRest);
+      if (inRange(p, BEATS.toRest)) restMix = easeInOut(norm(p, BEATS.toRest));
+      else if (inRange(p, BEATS.fromRest)) restMix = 1 - easeInOut(norm(p, BEATS.fromRest));
       else restMix = 1;
       alpha = 1 - restMix;
     } else if (inRange(p, BEATS.standUp) && p < BEATS.walkOut[0]) {
       const u = norm(p, BEATS.standUp);
-      frame = settleStart + Math.round((1 - u) * (settleLast - settleStart));
-      groundY = lerp(metrics.pageY, metrics.groundY, easeInOut(u)) - Math.sin(Math.PI * u) * hop;
-      shadow = u;
+      const e = easeInOut(u);
+      frame = stanceFrame;
+      groundY = lerp(metrics.pageY, metrics.groundY, e) - Math.sin(Math.PI * u) * hop;
+      crouch = 1 - e;
+      shadow = e;
     }
 
     return {
-      dog: { x, groundY, frame, facing: this.facing, alpha, shadow },
+      dog: { x, groundY, frame, facing: this.facing, alpha, shadow, crouch },
       restMix,
     };
   }

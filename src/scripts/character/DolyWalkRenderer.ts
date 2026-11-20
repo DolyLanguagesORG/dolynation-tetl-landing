@@ -1,8 +1,8 @@
 import type { CharacterFrameState, CharacterRenderer, SpriteManifest } from './CharacterAnimator';
 
 /**
- * Dibuja a Doly desde un sprite sheet .webp sobre un <canvas> 2D.
- * Sin video, sin GIF: cada frame se elige según el progreso del scroll.
+ * Dibuja a Doly desde el sprite sheet .webp (construido con los 12 sprites SVG)
+ * sobre un <canvas> 2D. Sin video, sin GIF: cada frame se elige según el progreso del scroll.
  */
 export class DolyWalkRenderer implements CharacterRenderer {
   private readonly ctx: CanvasRenderingContext2D;
@@ -40,7 +40,8 @@ export class DolyWalkRenderer implements CharacterRenderer {
   }
 
   render(s: CharacterFrameState) {
-    const key = `${s.x.toFixed(1)}|${s.groundY.toFixed(1)}|${s.frame}|${s.facing}|${s.alpha.toFixed(3)}|${s.shadow.toFixed(2)}`;
+    const crouch = s.crouch ?? 0;
+    const key = `${s.x.toFixed(1)}|${s.groundY.toFixed(1)}|${s.frame}|${s.facing}|${s.alpha.toFixed(3)}|${s.shadow.toFixed(2)}|${crouch.toFixed(3)}`;
     if (key === this.last) return;
     this.last = key;
 
@@ -50,27 +51,31 @@ export class DolyWalkRenderer implements CharacterRenderer {
 
     const dw = m.designW * k;
     const dh = m.designH * k;
-    // fuera de pantalla: nada que dibujar
     if (s.x + dw < 0 || s.x - dw > this.w) return;
 
     ctx.save();
     ctx.globalAlpha = s.alpha;
 
-    // sombra suave en el piso
+    // Sombra suave bajo las patas de Doly
     if (s.shadow > 0) {
-      const grad = ctx.createRadialGradient(s.x, s.groundY, 0, s.x, s.groundY, 110 * k);
-      grad.addColorStop(0, `rgba(0,0,0,${0.45 * s.shadow})`);
+      const shadowR = 195 * k;
+      const grad = ctx.createRadialGradient(s.x, s.groundY, 0, s.x, s.groundY, shadowR);
+      grad.addColorStop(0, `rgba(0,0,0,${0.48 * s.shadow})`);
       grad.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.ellipse(s.x, s.groundY + 2 * k, 110 * k, 9 * k, 0, 0, Math.PI * 2);
+      ctx.ellipse(s.x, s.groundY + 3 * k, shadowR, 14 * k, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
     const col = s.frame % m.cols;
     const row = Math.floor(s.frame / m.cols);
-    ctx.translate(s.x, 0);
-    ctx.scale(s.facing, 1);
+
+    // Anclamos en el punto de contacto con el suelo para que la flexión (crouch) al subir al libro sea natural
+    const sx = 1 + crouch * 0.05;
+    const sy = 1 - crouch * 0.22;
+    ctx.translate(s.x, s.groundY);
+    ctx.scale(s.facing * sx, sy);
     ctx.drawImage(
       this.image,
       col * m.frameW,
@@ -78,7 +83,7 @@ export class DolyWalkRenderer implements CharacterRenderer {
       m.frameW,
       m.frameH,
       -m.centerX * k,
-      s.groundY - m.groundY * k,
+      -m.groundY * k,
       dw,
       dh,
     );

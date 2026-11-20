@@ -1,14 +1,13 @@
 /**
  * Contrato común para cualquier "motor" de personaje.
- * Hoy: sprite sheet sobre canvas (DolyWalkRenderer).
- * Mañana: podría ser Rive (.riv) o un modelo GLB en Three.js sin tocar la coreografía.
+ * Usa el sprite sheet .webp generado a partir de los 12 sprites SVG de Doly.
  */
 export interface CharacterFrameState {
   /** centro del cuerpo en px (coordenadas del stage) */
   x: number;
   /** y del piso bajo las patas en px */
   groundY: number;
-  /** índice absoluto del frame dentro del sprite sheet */
+  /** índice absoluto del frame dentro del sprite sheet (0..11) */
   frame: number;
   /** 1 = mira a la derecha, -1 = mira a la izquierda */
   facing: 1 | -1;
@@ -16,6 +15,8 @@ export interface CharacterFrameState {
   alpha: number;
   /** intensidad de la sombra en el piso (0–1) */
   shadow: number;
+  /** flexión suave (0 = de pie caminando, 1 = agachándose sobre el libro) */
+  crouch?: number;
 }
 
 export interface CharacterRenderer {
