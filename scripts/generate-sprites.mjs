@@ -1,182 +1,164 @@
 /**
- * Doly sprite pipeline (100% basado en los 12 sprites SVG de caminata del usuario)
- * -------------------------------------------------------------------------------
+ * Doly sprite pipeline (basado en los 30 frames del GIF animado doly-walk-source.gif)
+ * -----------------------------------------------------------------------------------
  * Entrada:
- *   - assets-src/doly_caminando_sprites/d-c-01.svg .. d-c-12.svg
+ *   - assets-src/doly-walk-source.gif (30 frames, 640x360)
  *   - assets-src/doly-book-reference.png
  *
- * Salida (sin video ni GIF):
- *   1. public/sprites/doly-walk.webp  -> sprite sheet alineado y normalizado (12 frames)
- *   2. public/sprites/doly-walk.json  -> manifest (frameW, frameH, cols, rows, groundY, strideUnits)
+ * Salida:
+ *   1. public/sprites/doly-walk.webp  -> sprite sheet transparente de 30 frames (6x5, 360x260 c/u)
+ *   2. public/sprites/doly-walk.json  -> manifest para el motor GSAP
  *   3. public/images/doly-book.webp   -> ilustración original recortada sin fondo (pose en el libro)
- *   4. assets-src/doly-walk-preview.png -> vista previa de verificación
+ *   4. assets-src/doly-walk-preview.png -> vista previa de verificación de los 30 frames
  */
 import sharp from 'sharp';
-import { mkdir, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SPRITES_SRC_DIR = path.join(root, 'assets-src', 'doly_caminando_sprites');
+const GIF_SRC = path.join(root, 'assets-src', 'doly-walk-source.gif');
 const REF = path.join(root, 'assets-src', 'doly-book-reference.png');
 const OUT_SPRITES = path.join(root, 'public', 'sprites');
 const OUT_IMAGES = path.join(root, 'public', 'images');
 
-// Dimensiones uniformes de cada celda en el sprite sheet
-const CELL_W = 630;
-const CELL_H = 440;
-const TARGET_NOSE_X = 608; // ancla horizontal de la punta de la nariz (deja margen amplio para la cola)
-const TARGET_GROUND_Y = 424; // línea de piso dentro del frame
-const TARGET_HEAD_TO_BELLY = 262; // altura normalizada cabeza -> pecho/vientre
-const COLS = 4;
+// Recorte constante en el espacio 640x360 del GIF para conservar el registro 1:1 original entre los 30 frames
+const CROP = { left: 118, top: 72, width: 360, height: 260 };
+const COLS = 6;
 
 /**
- * Limpia manchas grises aisladas fuera del contorno negro (ej. junto a la pata levantada en d-c-06)
- * y mide los puntos de anclaje anatómicos (headTopY, noseX, bellyY, groundY) del frame.
+ * Extrae a Doly eliminando el fondo oscuro del GIF (incluyendo el hueco entre las patas)
+ * y suavizando los bordes de dithering de 1px propios del formato GIF.
  */
-async function processRawFrame(filePath) {
-  const { data, info } = await sharp(filePath).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  const { width: W, height: H } = info;
+function extractCleanDogFromGifFrame(data, W, H) {
+  const N = W * H;
+  const lum = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    lum[i] = (data[i * 3] + data[i * 3 + 1] + data[i * 3 + 2]) / 3;
+  }
 
-  // Limpieza de artefactos grises semitransparentes/residuales que no son ni blanco del pelaje ni negro del cuerpo
-  // (En d-c-06 hay un pequeño resto de fondo gris claro bajo la pata delantera)
-  const buf = Buffer.from(data);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const i = (y * W + x) * 4;
-      const r = buf[i];
-      const g = buf[i + 1];
-      const b = buf[i + 2];
-      const a = buf[i + 3];
-      if (a === 0) continue;
-      const lum = (r + g + b) / 3;
-      // Si es un píxel gris medio aislado (lum entre 95 y 190) en la zona inferior de las patas,
-      // verificamos si está desconectado de trazos blancos sólidos (lum > 220)
-      if (y > H * 0.55 && lum > 95 && lum < 195) {
-        let nearWhite = false;
-        for (let dy = -3; dy <= 3 && !nearWhite; dy++) {
-          for (let dx = -3; dx <= 3; dx++) {
-            const xx = x + dx;
-            const yy = y + dy;
-            if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
-            const j = (yy * W + xx) * 4;
-            if (buf[j + 3] > 200 && buf[j] > 215) {
-              nearWhite = true;
-              break;
-            }
+  // 1. Píxeles del pelaje (pelaje oscuro >= 25.5, pelaje blanco >= 180)
+  const isFur = new Uint8Array(N);
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x;
+      if (lum[i] >= 25.5) {
+        let count = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (lum[(y + dy) * W + (x + dx)] >= 25) count++;
           }
         }
-        if (!nearWhite) {
-          buf[i + 3] = 0;
-        }
+        if (count >= 4) isFur[i] = 1;
       }
     }
   }
 
-  // 1. Tope de la cabeza (corona) en la franja horizontal donde está el cráneo
-  let headTopY = H;
-  for (let y = 0; y < H; y++) {
-    for (let x = Math.max(0, W - 230); x < W - 65; x++) {
-      if (buf[(y * W + x) * 4 + 3] > 128 && y < headTopY) {
-        headTopY = y;
-      }
-    }
-  }
-
-  // 2. Punta de la nariz (máximo X en la región de la cabeza)
-  let noseX = 0;
-  for (let y = headTopY; y < Math.min(H, headTopY + 150); y++) {
-    for (let x = Math.max(0, W - 160); x < W; x++) {
-      if (buf[(y * W + x) * 4 + 3] > 128 && x > noseX) {
-        noseX = x;
-      }
-    }
-  }
-
-  // 3. Línea inferior del vientre/pecho a mitad del torso (noseX - 310)
-  const torsoX = Math.max(0, Math.min(W - 1, noseX - 310));
-  let bellyY = 0;
-  for (let y = headTopY + 120; y < Math.min(H, headTopY + 305); y++) {
-    if (buf[(y * W + torsoX) * 4 + 3] > 128) {
-      bellyY = y;
-    }
-  }
-
-  // 4. Contacto de la pata más baja con el suelo
-  let groundY = 0;
+  // 2. Distancia al pelaje (captura el contorno negro, nariz y pupila)
+  const distToFur = new Uint8Array(N);
+  distToFur.fill(255);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      if (buf[(y * W + x) * 4 + 3] > 128 && y > groundY) {
-        groundY = y;
+      const i = y * W + x;
+      if (isFur[i]) {
+        distToFur[i] = 0;
+        continue;
       }
+      let best = 255;
+      const R = 6;
+      for (let dy = -R; dy <= R; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= H) continue;
+        for (let dx = -R; dx <= R; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= W) continue;
+          if (isFur[yy * W + xx]) {
+            const d = Math.round(Math.hypot(dx, dy) * 2);
+            if (d < best) best = d;
+          }
+        }
+      }
+      distToFur[i] = best;
     }
   }
 
-  return { buf, W, H, headTopY, noseX, bellyY, groundY };
-}
-
-async function buildSpriteSheet() {
-  const files = (await readdir(SPRITES_SRC_DIR)).filter((f) => f.toLowerCase().endsWith('.svg')).sort();
-  if (files.length === 0) {
-    throw new Error(`No se encontraron archivos SVG en ${SPRITES_SRC_DIR}`);
+  // 3. Máscara binaria del perro (pelaje + contorno negro)
+  const mask = new Uint8Array(N);
+  for (let i = 0; i < N; i++) {
+    const L = lum[i];
+    const d = distToFur[i];
+    if (d === 0 || (d <= 7 && L <= 12.2) || (d <= 11 && L <= 9.5)) {
+      mask[i] = 1;
+    }
   }
 
-  const totalFrames = files.length;
+  // 4. Filtro morfológico de mayoría 3x3 para eliminar puntos de dithering del GIF en el borde exterior
+  const cleanMask = new Uint8Array(N);
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x;
+      if (!mask[i]) continue;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (mask[(y + dy) * W + (x + dx)]) n++;
+        }
+      }
+      if (n >= 5) cleanMask[i] = 1;
+    }
+  }
+
+  const out = Buffer.alloc(N * 4);
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x;
+      if (!cleanMask[i]) continue;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (cleanMask[(y + dy) * W + (x + dx)]) n++;
+        }
+      }
+      const a = n >= 8 ? 255 : Math.round(((n - 3) / 5) * 255);
+      out[i * 4] = data[i * 3];
+      out[i * 4 + 1] = data[i * 3 + 1];
+      out[i * 4 + 2] = data[i * 3 + 2];
+      out[i * 4 + 3] = a;
+    }
+  }
+  return out;
+}
+
+async function buildSpriteSheetFromGif() {
+  const meta = await sharp(GIF_SRC, { animated: true }).metadata();
+  const totalFrames = meta.pages || 30;
   const rows = Math.ceil(totalFrames / COLS);
-  const sheetW = COLS * CELL_W;
-  const sheetH = rows * CELL_H;
+  const sheetW = COLS * CROP.width;
+  const sheetH = rows * CROP.height;
 
   const composites = [];
 
   for (let i = 0; i < totalFrames; i++) {
-    const filePath = path.join(SPRITES_SRC_DIR, files[i]);
-    const raw = await processRawFrame(filePath);
+    const { data, info } = await sharp(GIF_SRC, { page: i })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
 
-    // Factor de escala para normalizar el tamaño del cuerpo (cabeza -> vientre) entre los 12 frames
-    const headToBelly = Math.max(1, raw.bellyY - raw.headTopY);
-    const scale = TARGET_HEAD_TO_BELLY / headToBelly;
+    const cleanRgba = extractCleanDogFromGifFrame(data, info.width, info.height);
 
-    const scaledW = Math.round(raw.W * scale);
-    const scaledH = Math.round(raw.H * scale);
-
-    const scaledNoseX = raw.noseX * scale;
-    const scaledGroundY = raw.groundY * scale;
-    const scaledBellyY = raw.bellyY * scale;
-
-    // Alineamos horizontalmente por la nariz; verticalmente combinamos 75% línea de vientre
-    // (con un ligero bobbing natural de caminata) + 25% contacto de pata con el piso para que
-    // el tronco no salte y las patas apoyadas siempre toquen la línea del camino.
-    const naturalBob = Math.sin((i / totalFrames) * Math.PI * 4) * 2.5;
-    const targetBellyInCell = 278 + naturalBob;
-    const dyByBelly = targetBellyInCell - scaledBellyY;
-    const dyByGround = TARGET_GROUND_Y - scaledGroundY;
-    const offsetY = Math.round(dyByBelly * 0.72 + dyByGround * 0.28);
-    const offsetX = Math.round(TARGET_NOSE_X - scaledNoseX);
-
-    const resizedPng = await sharp(raw.buf, { raw: { width: raw.W, height: raw.H, channels: 4 } })
-      .resize(scaledW, scaledH, { kernel: 'lanczos3' })
-      .png()
-      .toBuffer();
-
-    // Encapsulamos en una celda de CELL_W x CELL_H para evitar desbordes fuera de su casilla
-    const cropLeft = Math.max(0, -offsetX);
-    const cropTop = Math.max(0, -offsetY);
-    const pasteLeft = Math.max(0, offsetX);
-    const pasteTop = Math.max(0, offsetY);
-    const extractW = Math.min(scaledW - cropLeft, CELL_W - pasteLeft);
-    const extractH = Math.min(scaledH - cropTop, CELL_H - pasteTop);
-
-    const clippedBuf = await sharp(resizedPng)
-      .extract({ left: cropLeft, top: cropTop, width: extractW, height: extractH })
+    const cellBuf = await sharp(cleanRgba, {
+      raw: { width: info.width, height: info.height, channels: 4 },
+    })
+      .extract(CROP)
       .png()
       .toBuffer();
 
     const col = i % COLS;
     const row = Math.floor(i / COLS);
     composites.push({
-      input: clippedBuf,
-      left: col * CELL_W + pasteLeft,
-      top: row * CELL_H + pasteTop,
+      input: cellBuf,
+      left: col * CROP.width,
+      top: row * CROP.height,
     });
   }
 
@@ -196,7 +178,6 @@ async function buildSpriteSheet() {
     .webp({ quality: 92, alphaQuality: 100, effort: 6 })
     .toFile(path.join(OUT_SPRITES, 'doly-walk.webp'));
 
-  // Vista previa sobre fondo oscuro para inspección
   await sheetBase
     .clone()
     .flatten({ background: '#1c1c1c' })
@@ -205,27 +186,26 @@ async function buildSpriteSheet() {
 
   const manifest = {
     image: '/sprites/doly-walk.webp',
-    frameW: CELL_W,
-    frameH: CELL_H,
+    frameW: CROP.width,
+    frameH: CROP.height,
     cols: COLS,
     rows,
-    designW: CELL_W,
-    designH: CELL_H,
-    groundY: TARGET_GROUND_Y,
-    standingHeight: 408,
-    strideUnits: 340,
-    centerX: 355,
+    designW: CROP.width,
+    designH: CROP.height,
+    groundY: 250,
+    standingHeight: 240,
+    strideUnits: 165,
+    centerX: 185,
     ranges: {
       walk: { start: 0, count: totalFrames },
-      settle: { start: totalFrames - 1, count: 1 },
+      settle: { start: 3, count: 1 },
     },
   };
 
   await writeFile(path.join(OUT_SPRITES, 'doly-walk.json'), JSON.stringify(manifest, null, 2));
-  console.log('✔ sprite sheet generado con los 12 sprites del usuario:', manifest);
+  console.log('✔ sprite sheet de 30 frames generado desde el GIF:', manifest);
 }
 
-// ---------------------------------------------------------------- recorte de la ilustración en el libro
 async function buildCutout() {
   const crop = { left: 328, top: 167, width: 375, height: 321 };
   const UP = 2;
@@ -304,5 +284,5 @@ async function buildCutout() {
   console.log('✔ cutout', W, H);
 }
 
-await buildSpriteSheet();
+await buildSpriteSheetFromGif();
 await buildCutout();

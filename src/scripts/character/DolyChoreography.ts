@@ -1,3 +1,4 @@
+import { gsap } from 'gsap';
 import type { CharacterFrameState, SpriteManifest } from './CharacterAnimator';
 import { BEATS, easeInOut, inRange, lerp, norm } from '../timeline/beats';
 
@@ -21,12 +22,12 @@ export interface ChoreographyOutput {
 type Mapping = 'forward' | 'mirror';
 
 /**
- * Traduce el progreso del scroll (0–1) en el estado de Doly usando los 12 frames SVG:
- *  - Ciclo de caminata: frames 0..11 sincronizados con el odómetro de distancia recorrida.
- *  - Llegada al libro: Doly apoya sus patas (frame 11), sube al libro con una ligera flexión
- *    y hace cross-fade limpio hacia la ilustración original recostada.
- *  - Salida y loop: al levantarse retoma el ciclo de 12 frames hasta salir por la derecha,
- *    y si el usuario hace scroll de regreso hacia arriba vuelve a entrar desde la izquierda.
+ * Controlador GSAP de la caminata de Doly (30 frames extraídos del GIF):
+ *  - Usa `gsap.to` para interpolar suavemente el cabezal de reproducción (`playhead`)
+ *    a través de los 30 frames del GIF cada vez que el usuario hace scroll, evitando
+ *    saltos bruscos entre ticks de la rueda del mouse.
+ *  - Usa `gsap.to` para animar el giro horizontal (`facing`) y la transición hacia
+ *    y desde el libro abierto en el centro.
  */
 export class DolyChoreography {
   private mapping: Mapping = 'forward';
@@ -34,12 +35,20 @@ export class DolyChoreography {
   private lastP = 0;
   private dir: 1 | -1 = 1;
   private lastX: number | null = null;
-  private odometer = 0;
+  private targetOdometer = 0;
+  private readonly anim = {
+    odometer: 0,
+  };
+  private currentP = 0;
+  private onAsyncUpdate?: (out: ChoreographyOutput) => void;
 
   constructor(
     private readonly manifest: SpriteManifest,
     private metrics: StageMetrics,
-  ) {}
+    onAsyncUpdate?: (out: ChoreographyOutput) => void,
+  ) {
+    this.onAsyncUpdate = onAsyncUpdate;
+  }
 
   setMetrics(m: StageMetrics) {
     this.metrics = m;
@@ -47,10 +56,10 @@ export class DolyChoreography {
   }
 
   private get offL() {
-    return -320 * this.metrics.k - 24;
+    return -195 * this.metrics.k - 24;
   }
   private get offR() {
-    return this.metrics.width + 320 * this.metrics.k + 24;
+    return this.metrics.width + 195 * this.metrics.k + 24;
   }
 
   private forwardX(p: number) {
@@ -63,7 +72,9 @@ export class DolyChoreography {
   }
 
   update(p: number): ChoreographyOutput {
-    const { manifest: m, metrics } = this;
+    const { metrics } = this;
+    this.currentP = p;
+
     if (p > this.lastP + 1e-6) this.dir = 1;
     else if (p < this.lastP - 1e-6) this.dir = -1;
     this.lastP = p;
@@ -82,18 +93,38 @@ export class DolyChoreography {
     if (this.lastX !== null) {
       const dx = x - this.lastX;
       if (Math.abs(dx) < metrics.width * 0.5) {
-        this.odometer += Math.abs(dx) / metrics.k;
-        if (walking && !offscreen && Math.abs(dx) > 0.05) this.facing = dx > 0 ? 1 : -1;
+        this.targetOdometer += Math.abs(dx) / metrics.k;
+        if (walking && !offscreen && Math.abs(dx) > 0.05) {
+          this.facing = dx > 0 ? 1 : -1;
+        }
       }
     }
     this.lastX = x;
 
-    const walkStart = m.ranges.walk.start;
-    const walkCount = m.ranges.walk.count; // 12 frames (d-c-01 .. d-c-12)
-    const stanceFrame = walkStart + walkCount - 1; // d-c-12 (pose estable de 4 apoyos)
-    const hop = 34 * metrics.k;
+    // GSAP interpola el avance por los 30 frames del GIF con inercia suave
+    gsap.to(this.anim, {
+      odometer: this.targetOdometer,
+      duration: 0.42,
+      ease: 'power2.out',
+      overwrite: true,
+      onUpdate: () => {
+        if (this.onAsyncUpdate) {
+          this.onAsyncUpdate(this.computeState(this.currentP, x));
+        }
+      },
+    });
 
-    let frame = walkStart + (Math.floor((this.odometer / m.strideUnits) * walkCount) % walkCount);
+    return this.computeState(p, x);
+  }
+
+  private computeState(p: number, x: number): ChoreographyOutput {
+    const { manifest: m, metrics } = this;
+    const walkStart = m.ranges.walk.start;
+    const walkCount = m.ranges.walk.count; // 30 frames del GIF
+    const stanceFrame = m.ranges.settle.start; // frame con las 4 patas apoyadas
+    const hop = 28 * metrics.k;
+
+    let frame = walkStart + (Math.floor((this.anim.odometer / m.strideUnits) * walkCount) % walkCount);
     let groundY = metrics.groundY;
     let alpha = 1;
     let restMix = 0;

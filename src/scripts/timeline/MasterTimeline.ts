@@ -86,7 +86,9 @@ export class MasterTimeline {
     };
 
     const initialMetrics = computeMetrics();
-    this.choreography = new DolyChoreography(manifest, initialMetrics);
+    this.choreography = new DolyChoreography(manifest, initialMetrics, ({ dog }) => {
+      this.renderer?.render(dog);
+    });
 
     // Prepara las huellas del camino
     const prints: PrintItem[] = Array.from(this.stageEl.querySelectorAll<HTMLElement>('[data-print]')).map((el) => ({

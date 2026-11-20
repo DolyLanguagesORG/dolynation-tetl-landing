@@ -1,22 +1,22 @@
 {
   "image": "/sprites/doly-walk.webp",
-  "frameW": 630,
-  "frameH": 440,
-  "cols": 4,
-  "rows": 3,
-  "designW": 630,
-  "designH": 440,
-  "groundY": 424,
-  "standingHeight": 408,
-  "strideUnits": 340,
-  "centerX": 355,
+  "frameW": 360,
+  "frameH": 260,
+  "cols": 6,
+  "rows": 5,
+  "designW": 360,
+  "designH": 260,
+  "groundY": 250,
+  "standingHeight": 240,
+  "strideUnits": 165,
+  "centerX": 185,
   "ranges": {
     "walk": {
       "start": 0,
-      "count": 12
+      "count": 30
     },
     "settle": {
-      "start": 11,
+      "start": 3,
       "count": 1
     }
   }
