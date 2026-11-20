@@ -1,0 +1,55 @@
+---
+/**
+ * Renderiza un texto con palabras envueltas en máscaras (para revelado
+ * palabra por palabra con GSAP) y palabras clave con anotación de traducción.
+ */
+import { parseRich } from '../lib/richText';
+
+interface Props {
+  text: string;
+  class?: string;
+  as?: 'h1' | 'h2' | 'h3' | 'p' | 'span';
+}
+
+const { text, class: className = '', as: Tag = 'h2' } = Astro.props;
+const segments = parseRich(text);
+
+type Token = { kind: 'word'; value: string } | { kind: 'space' } | { kind: 'xlate'; value: string; translations: string[] };
+const tokens: Token[] = [];
+for (const seg of segments) {
+  if (seg.type === 'xlate') {
+    tokens.push({ kind: 'xlate', value: seg.value, translations: seg.translations });
+    continue;
+  }
+  const parts = seg.value.split(/(\s+)/);
+  for (const p of parts) {
+    if (!p) continue;
+    if (/^\s+$/.test(p)) tokens.push({ kind: 'space' });
+    else tokens.push({ kind: 'word', value: p });
+  }
+}
+---
+
+<Tag class={className} data-split>
+  {
+    tokens.map((t) => {
+      if (t.kind === 'space') return ' ';
+      if (t.kind === 'word')
+        return (
+          <span class="word-mask">
+            <span class="word">{t.value}</span>
+          </span>
+        );
+      return (
+        <span class="xlate" data-xlate={t.translations.join('|')}>
+          <span class="xlate__note" aria-hidden="true">
+            {t.translations[0]}
+          </span>
+          <span class="word-mask">
+            <span class="word font-serif italic font-normal">{t.value}</span>
+          </span>
+        </span>
+      );
+    })
+  }
+</Tag>

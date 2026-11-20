@@ -1,0 +1,68 @@
+---
+import { brand, nav } from '../data/landing';
+---
+
+<header class="site-header fixed inset-x-0 top-0 z-50" data-header>
+  <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 md:px-10">
+    <a href="/" class="group flex items-center gap-3" aria-label={`${brand.name} inicio`}>
+      <span class="grid h-8 w-8 place-items-center rounded-full border border-ink-600 transition-colors group-hover:border-ink-200">
+        <svg viewBox="0 0 24 20" class="h-3.5 w-3.5 fill-ink-100" aria-hidden="true">
+          <ellipse cx="9" cy="10" rx="5.2" ry="4.4"></ellipse>
+          <circle cx="16" cy="4.2" r="2.1"></circle>
+          <circle cx="18.6" cy="9" r="2.1"></circle>
+          <circle cx="16.2" cy="14.4" r="2.1"></circle>
+        </svg>
+      </span>
+      <span class="text-sm font-semibold tracking-tight text-ink-100">
+        {brand.name}
+        <span class="ml-1 font-mono text-[10px] font-normal uppercase tracking-[0.2em] text-ink-500">{brand.product}</span>
+      </span>
+    </a>
+
+    <nav class="hidden items-center gap-8 md:flex" aria-label="Principal">
+      {
+        nav.map((item) => (
+          <a href={item.href} class="nav-link text-sm text-ink-300 transition-colors hover:text-ink-100">
+            {item.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <a
+      href="#cta"
+      class="rounded-full border border-ink-600 px-4 py-2 text-xs font-medium tracking-wide text-ink-100 transition-colors hover:border-ink-100 hover:bg-ink-100 hover:text-ink-950"
+    >
+      Empezar
+    </a>
+  </div>
+  <!-- progreso global del recorrido -->
+  <div class="absolute inset-x-0 bottom-0 h-px bg-ink-800">
+    <div class="h-full origin-left scale-x-0 bg-ink-300" data-scroll-progress></div>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    background: linear-gradient(to bottom, rgb(28 28 28 / 0.85), rgb(28 28 28 / 0));
+  }
+  .nav-link {
+    position: relative;
+  }
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -4px;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.5s var(--ease-out-expo);
+  }
+  .nav-link:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+</style>

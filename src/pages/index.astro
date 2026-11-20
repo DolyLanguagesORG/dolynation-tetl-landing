@@ -1,16 +1,67 @@
 ---
+import Layout from '../layouts/Layout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import Stage3D from '../components/Stage3D.astro';
+import HeroTitle from '../components/HeroTitle.astro';
+import StoryChapters from '../components/StoryChapters.astro';
+import DolyStage from '../components/DolyStage.astro';
+import FinalCta from '../components/FinalCta.astro';
+import { STORY_HEIGHT_VH } from '../scripts/timeline/beats';
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<Layout>
+  <SiteHeader />
+  <Stage3D />
+
+  <main>
+    <!-- Pista de scroll para la experiencia 3D Scrollytelling -->
+    <section
+      id="story-track"
+      class="relative w-full"
+      style={`height: ${STORY_HEIGHT_VH}svh;`}
+      aria-label="Recorrido interactivo DolyNation"
+    >
+      <div id="story-stage" class="sticky top-0 h-svh w-full overflow-hidden">
+        <HeroTitle />
+        <StoryChapters />
+        <DolyStage />
+      </div>
+    </section>
+
+    <FinalCta />
+  </main>
+</Layout>
+
+<script>
+  import { SmoothScroll } from '../scripts/core/SmoothScroll';
+  import { SceneController } from '../scripts/scene/SceneController';
+  import { MasterTimeline } from '../scripts/timeline/MasterTimeline';
+
+  let smoothScroll: SmoothScroll | undefined;
+  let sceneController: SceneController | undefined;
+  let masterTimeline: MasterTimeline | undefined;
+
+  function boot() {
+    smoothScroll = new SmoothScroll();
+
+    const webglCanvas = document.querySelector<HTMLCanvasElement>('[data-webgl-canvas]');
+    if (webglCanvas) {
+      sceneController = new SceneController(webglCanvas);
+    }
+
+    const track = document.getElementById('story-track');
+    const stage = document.getElementById('story-stage');
+    if (track && stage) {
+      masterTimeline = new MasterTimeline(track, stage, sceneController);
+      masterTimeline.init();
+    }
+  }
+
+  boot();
+
+  document.addEventListener('astro:before-swap', () => {
+    masterTimeline?.destroy();
+    sceneController?.dispose();
+    smoothScroll?.destroy();
+  });
+</script>

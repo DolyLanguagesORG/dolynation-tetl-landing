@@ -1,0 +1,76 @@
+---
+import RichTitle from './RichTitle.astro';
+import { brand, cta, footer, trailWords, welcomeLanguages } from '../data/landing';
+
+const marquee = [...trailWords, ...trailWords];
+---
+
+<section id="cta" class="relative z-10 flex min-h-svh flex-col justify-center overflow-hidden" data-cta>
+  <div class="mx-auto w-full max-w-6xl px-6 md:px-10">
+    <p class="mb-6 flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.28em] text-ink-400" data-cta-reveal>
+      <span class="block h-px w-10 bg-ink-500"></span>
+      {cta.eyebrow}
+    </p>
+    <RichTitle
+      text={cta.title}
+      as="h2"
+      class="cta-title max-w-4xl text-balance font-medium leading-[1] tracking-[-0.04em] text-ink-100"
+    />
+    <p class="mt-8 max-w-xl text-lg leading-relaxed text-ink-300" data-cta-reveal>{cta.body}</p>
+
+    <div class="mt-10 flex flex-wrap items-center gap-4" data-cta-reveal>
+      <a
+        href={cta.primary.href}
+        class="group inline-flex items-center gap-3 rounded-full bg-ink-100 px-7 py-4 text-sm font-semibold text-ink-950 transition-transform hover:-translate-y-0.5"
+      >
+        {cta.primary.label}
+        <span class="inline-block transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
+      </a>
+      <a
+        href={cta.secondary.href}
+        class="inline-flex items-center gap-3 rounded-full border border-ink-600 px-7 py-4 text-sm font-medium text-ink-100 transition-colors hover:border-ink-100"
+      >
+        {cta.secondary.label}
+      </a>
+    </div>
+
+    <ul class="mt-14 flex flex-wrap gap-2" aria-label="Idiomas disponibles" data-cta-reveal>
+      {
+        welcomeLanguages.map((l) => (
+          <li
+            class="rounded-full border border-ink-700 px-3 py-1.5 font-mono text-[11px] tracking-[0.12em] text-ink-300"
+            lang={l.code}
+          >
+            {l.tag} · {l.native}
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+
+  <!-- marquee de saludos -->
+  <div class="mt-20 border-y border-ink-800 py-5" aria-hidden="true">
+    <div class="marquee-track flex w-max gap-12 whitespace-nowrap">
+      {
+        marquee.map((w, i) => (
+          <span class={`text-3xl tracking-tight md:text-5xl ${i % 2 ? 'font-serif italic text-ink-400' : 'text-ink-600'}`}>{w}</span>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<footer class="relative z-10 border-t border-ink-800">
+  <div
+    class="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-10 font-mono text-[11px] tracking-[0.12em] text-ink-500 md:flex-row md:items-center md:justify-between md:px-10"
+  >
+    <span>© {new Date().getFullYear()} {brand.name} · {brand.product}</span>
+    <span>{footer.note}</span>
+  </div>
+</footer>
+
+<style>
+  .cta-title {
+    font-size: clamp(2.6rem, 7vw, 6.5rem);
+  }
+</style>
