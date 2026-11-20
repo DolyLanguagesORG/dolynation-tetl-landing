@@ -28,10 +28,9 @@ interface ChapterRefs {
  * Orquestador principal de la experiencia 3D Scrollytelling:
  * Conecta el progreso del scroll con:
  *  1. Línea del camino + huellas multilingües ("rastro de aprendizaje")
- *  2. Libro abierto en el centro + cross-fade hacia la ilustración original de Doly
- *  3. Motor de Sprite Sheet en <canvas> (DolyWalkRenderer + DolyChoreography)
- *  4. Capítulos editoriales con revelado palabra por palabra y notas de traducción
- *  5. Cámara 3D y escena monocromática en Three.js
+ *  2. Motor en <canvas> con los 3 GIFs de Doly (caminando, recostándose en el libro y levantándose)
+ *  3. Capítulos editoriales con revelado palabra por palabra y notas de traducción
+ *  4. Cámara 3D y escena monocromática en Three.js
  */
 export class MasterTimeline {
   private ctx?: gsap.Context;
@@ -51,10 +50,6 @@ export class MasterTimeline {
   async init() {
     const canvas = this.stageEl.querySelector<HTMLCanvasElement>('[data-doly-canvas]');
     const anchor = this.stageEl.querySelector<HTMLElement>('[data-anchor]');
-    const restImg = this.stageEl.querySelector<HTMLImageElement>('[data-doly-rest]');
-    const bookEl = this.stageEl.querySelector<SVGElement>('[data-book]');
-    const bookLeft = this.stageEl.querySelector<SVGGElement>('[data-book-half="left"]');
-    const bookRight = this.stageEl.querySelector<SVGGElement>('[data-book-half="right"]');
     const pathLine = this.stageEl.querySelector<HTMLElement>('[data-path-line]');
     const pathTicks = this.stageEl.querySelector<HTMLElement>('[data-path-ticks]');
     const heroEl = this.stageEl.querySelector<HTMLElement>('[data-hero]');
@@ -63,8 +58,8 @@ export class MasterTimeline {
 
     if (!canvas || !anchor) return;
 
-    const { manifest, image } = await loadSpriteSheet('/sprites/doly-walk.json');
-    this.renderer = new DolyWalkRenderer(canvas, image, manifest);
+    const { manifest, image, bookImage } = await loadSpriteSheet('/sprites/doly-walk.json');
+    this.renderer = new DolyWalkRenderer(canvas, image, bookImage, manifest);
 
     const computeMetrics = (): StageMetrics => {
       const stageRect = this.stageEl.getBoundingClientRect();
@@ -73,14 +68,13 @@ export class MasterTimeline {
       this.renderer!.resize(stageRect.width, stageRect.height, dpr);
 
       const groundY = anchorRect.top - stageRect.top + anchorRect.width * 0.816;
-      const pageY = anchorRect.top - stageRect.top + anchorRect.height * 0.74;
-      const k = (anchorRect.width * 0.62) / manifest.standingHeight;
+      // Escala basada en el ancho del libro (390 unidades en el GIF)
+      const k = anchorRect.width / 355;
       this.renderer!.setScale(k);
 
       return {
         width: stageRect.width,
         groundY,
-        pageY,
         k,
       };
     };
@@ -90,14 +84,12 @@ export class MasterTimeline {
       this.renderer?.render(dog);
     });
 
-    // Prepara las huellas del camino
     const prints: PrintItem[] = Array.from(this.stageEl.querySelectorAll<HTMLElement>('[data-print]')).map((el) => ({
       el,
       xRatio: Number(el.dataset.x || '0') / 100,
       visitedAt: -1,
     }));
 
-    // Prepara referencias de los capítulos editoriales
     const chapterRefs: ChapterRefs[] = Array.from(this.stageEl.querySelectorAll<HTMLElement>('[data-chapter]')).map(
       (el) => {
         const [s, e] = (el.dataset.window || '0,1').split(',').map(Number);
@@ -113,13 +105,12 @@ export class MasterTimeline {
       },
     );
 
-    // Rotación suave de las anotaciones de traducción [palabra|word|mot|...]
     this.startTranslationNotesTicker();
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reducedMotion) {
-      if (restImg) restImg.style.opacity = '1';
-      if (bookEl) bookEl.style.opacity = '0';
+      const { dog } = this.choreography.update(0.52);
+      this.renderer.render(dog);
       prints.forEach((p) => (p.el.style.opacity = '0.55'));
       return;
     }
@@ -153,34 +144,11 @@ export class MasterTimeline {
         pathTicks.style.opacity = String(pathP * 0.85);
       }
 
-      // 4. Coreografía de Doly (caminata + llegada al libro + pose final + salida + loop)
-      const { dog, restMix } = this.choreography!.update(p);
+      // 4. Coreografía de los 3 GIFs de Doly (caminata + recostarse en el libro + levantarse + salida + loop)
+      const { dog } = this.choreography!.update(p);
       this.renderer!.render(dog);
 
-      // 5. Libro abierto en el centro (se abre antes de que llegue Doly y hace cross-fade con la ilustración original)
-      const bookAppear = easeInOut(norm(p, BEATS.bookIn));
-      if (bookEl) {
-        const svgBookAlpha = bookAppear * (1 - restMix);
-        bookEl.style.opacity = svgBookAlpha.toFixed(3);
-        const bookScale = 0.88 + 0.12 * bookAppear;
-        bookEl.style.transform = `scale(${bookScale.toFixed(3)})`;
-      }
-      if (bookLeft && bookRight) {
-        const openAngle = (1 - bookAppear) * 24;
-        bookLeft.style.transformOrigin = '187px 268px';
-        bookRight.style.transformOrigin = '187px 268px';
-        bookLeft.style.transform = `rotate(${openAngle.toFixed(1)}deg)`;
-        bookRight.style.transform = `rotate(${(-openAngle).toFixed(1)}deg)`;
-      }
-
-      // 6. Ilustración original de Doly recostada sobre el libro
-      if (restImg) {
-        restImg.style.opacity = restMix.toFixed(3);
-        const s = 0.97 + 0.03 * restMix;
-        restImg.style.transform = `scale(${s.toFixed(4)})`;
-      }
-
-      // 7. Rastro de huellas y palabras a medida que Doly pisa cada punto del camino
+      // 5. Rastro de huellas y palabras a medida que Doly pisa cada punto del camino
       const stageWidth = Math.max(1, this.stageEl.clientWidth);
       const dogRatio = dog.x / stageWidth;
       if (p <= 0.02) {
@@ -204,7 +172,7 @@ export class MasterTimeline {
       }
       this.lastDogRatio = dogRatio;
 
-      // 8. Capítulos editoriales sincronizados al tramo del recorrido
+      // 6. Capítulos editoriales sincronizados al tramo del recorrido
       for (const ch of chapterRefs) {
         if (p < ch.start || p > ch.end) {
           ch.el.style.visibility = 'hidden';
@@ -213,7 +181,7 @@ export class MasterTimeline {
         }
         ch.el.style.visibility = 'visible';
         const span = ch.end - ch.start;
-        const local = (p - ch.start) / span; // 0..1
+        const local = (p - ch.start) / span;
         const enter = clamp01(local / 0.22);
         const exit = clamp01((1 - local) / 0.2);
         const vis = easeInOut(Math.min(enter, exit));
@@ -238,13 +206,12 @@ export class MasterTimeline {
         }
       }
 
-      // 9. Escena 3D en Three.js (avance de cámara + parallax con la posición de Doly)
+      // 7. Escena 3D en Three.js (avance de cámara + parallax con la posición de Doly)
       const dogXNorm = clamp01(dogRatio) * 2 - 1;
       this.scene?.setProgress(p, dogXNorm);
     };
 
     this.ctx = gsap.context(() => {
-      // Estado inicial en p = 0
       applyProgress(0);
 
       ScrollTrigger.create({
@@ -255,7 +222,6 @@ export class MasterTimeline {
         onUpdate: (self) => applyProgress(self.progress),
       });
 
-      // Animación de entrada de la sección CTA final
       const ctaEl = document.querySelector<HTMLElement>('[data-cta]');
       if (ctaEl) {
         const ctaWords = ctaEl.querySelectorAll<HTMLElement>('.word');
@@ -294,7 +260,6 @@ export class MasterTimeline {
       }
     });
 
-    // Recalcular métricas en resize
     this.resizeObserver = new ResizeObserver(() => {
       if (!this.choreography) return;
       this.choreography.setMetrics(computeMetrics());

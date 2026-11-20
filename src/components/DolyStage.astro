@@ -1,5 +1,4 @@
 ---
-import OpenBook from './OpenBook.astro';
 import { trailWords } from '../data/landing';
 
 /**
@@ -10,7 +9,7 @@ const prints: { x: number; up: boolean; word?: string }[] = [];
 let w = 0;
 for (let i = 0; i < 26; i++) {
   const x = 2 + i * 3.85;
-  if (x > 39 && x < 61) continue;
+  if (x > 36 && x < 64) continue;
   const up = i % 2 === 0;
   const word = up ? trailWords[w++ % trailWords.length] : undefined;
   prints.push({ x, up, word });
@@ -42,26 +41,11 @@ for (let i = 0; i < 26; i++) {
     }
   </div>
 
-  <!-- libro (SVG vectorial) -->
-  <div class="doly-anchor z-10" data-anchor>
-    <OpenBook />
-  </div>
+  <!-- ancla dimensional para calcular la escala responsiva en el canvas -->
+  <div class="doly-anchor pointer-events-none opacity-0" data-anchor></div>
 
-  <!-- Doly (sprite sheet sobre canvas) -->
+  <!-- Doly + Libro (3 GIFs completos renderizados sobre canvas y controlados con GSAP) -->
   <canvas class="absolute inset-0 z-20 h-full w-full" data-doly-canvas></canvas>
-
-  <!-- pose final: ilustración original recortada -->
-  <div class="doly-anchor z-30">
-    <img
-      src="/images/doly-book.webp"
-      alt=""
-      width="750"
-      height="642"
-      decoding="async"
-      class="absolute inset-0 h-full w-full select-none opacity-0"
-      data-doly-rest
-    />
-  </div>
 </div>
 
 <style>

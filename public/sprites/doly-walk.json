@@ -6,18 +6,36 @@
   "rows": 5,
   "designW": 360,
   "designH": 260,
-  "groundY": 250,
-  "standingHeight": 240,
-  "strideUnits": 165,
+  "groundY": 244,
+  "standingHeight": 233,
+  "strideUnits": 160,
   "centerX": 185,
+  "walkScale": 0.9356223175965666,
+  "bookSeq": {
+    "image": "/sprites/doly-book-seq.webp",
+    "frameW": 680,
+    "frameH": 320,
+    "cols": 6,
+    "rows": 11,
+    "groundY": 304,
+    "lieSpineX": 375,
+    "standSpineX": 190,
+    "lieStart": 0,
+    "lieCount": 30,
+    "standStart": 30,
+    "standCount": 30,
+    "emptyBookFrame": 60,
+    "entryDogOffsetX": -214,
+    "exitDogOffsetX": 305
+  },
   "ranges": {
     "walk": {
       "start": 0,
       "count": 30
     },
     "settle": {
-      "start": 3,
-      "count": 1
+      "start": 0,
+      "count": 30
     }
   }
 }
