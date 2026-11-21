@@ -16,6 +16,14 @@ mergearlo se crean el tag anotado y la GitHub Release. Ver
 > landing tiene la suya (`site_version`). Se pueden publicar por separado: un
 > retoque visual en la landing no obliga a subir la aplicación.
 
+## [0.1.2](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.1.1...v0.1.2) (2026-11-21)
+
+
+### Bug Fixes
+
+* **landing:** las cabeceras de seguridad se perdian en cada location ([#20](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/20)) ([78d4dbe](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/78d4dbe35055c97e730cc0de1e5bc58d8df5f84f))
+* **landing:** moderate Doly GIF animation speed to 13 FPS and condense copy ([#16](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/16)) ([fbe7ee1](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/fbe7ee152d76fa8e4de2dda27a7e5270dc18aafb))
+
 ## [0.1.1](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.1.0...v0.1.1) (2026-11-21)
 
 
