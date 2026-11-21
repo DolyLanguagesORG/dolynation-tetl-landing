@@ -108,6 +108,15 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Los PRs de Dependabot se ejecutan SIN secrets (GitHub los trata
+          # como si vinieran de fuera). Sin token no hay nada que sincronizar,
+          # asi que se avisa y se sale bien: un check rojo por esto no dice
+          # nada del cambio de dependencias.
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::notice::Sin token de la organizacion: no se sincroniza el tablero."
+            exit 0
+          fi
+
           # Se usa la API GraphQL con el ID del project: la CLI `gh project`
           # necesita resolver si el owner es usuario u organizacion, y con un
           # token que no tiene `read:org` falla con "unknown owner type".
@@ -161,6 +170,13 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
+
+          # Mismo caso que el paso anterior: sin token (PR de Dependabot) no
+          # hay nada que mover.
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::notice::Sin token de la organizacion: no se mueven las issues."
+            exit 0
+          fi
 
           mover() {
             local item_id="$1" destino="$2" num="$3" actual="$4"
