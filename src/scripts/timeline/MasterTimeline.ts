@@ -217,9 +217,6 @@ export class MasterTimeline {
           });
         }
       });
-
-      // 5. Ordena a Doly avanzar sus pasos hacia el waypoint de esta sección a velocidad fija
-      this.choreography?.goToSection(sectionIndex);
     };
 
     this.startTranslationNotesTicker();
@@ -239,7 +236,10 @@ export class MasterTimeline {
           if (headerProgress) {
             headerProgress.style.transform = `scaleX(${p.toFixed(4)})`;
           }
-          // Mapeo de progreso a sección (0..5)
+          // Doly sigue el camino continuo a velocidad constante sin detenerse por sección
+          this.choreography?.setTargetProgress(p);
+
+          // Mapeo de progreso a sección editorial (0..5)
           let sec = 0;
           if (p < 0.12) sec = 0;
           else if (p < 0.31) sec = 1;

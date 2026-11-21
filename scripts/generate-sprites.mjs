@@ -479,8 +479,8 @@ const manifest = {
     standStart: 30,
     standCount: 30,
     emptyBookFrame: 60,
-    entryDogOffsetX: -214,
-    exitDogOffsetX: 305,
+    entryDogOffsetX: -235,
+    exitDogOffsetX: 235,
   },
   ranges: {
     walk: { start: 0, count: walkCount },

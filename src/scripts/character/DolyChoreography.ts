@@ -1,6 +1,6 @@
 import { gsap } from 'gsap';
 import type { CharacterFrameState, SpriteManifest } from './CharacterAnimator';
-import { BEATS } from '../timeline/beats';
+import { clamp01, lerp } from '../timeline/beats';
 
 export interface StageMetrics {
   /** ancho del stage en px */
@@ -17,65 +17,66 @@ export interface ChoreographyOutput {
   visualProgress: number;
 }
 
+type Mapping = 'forward' | 'mirror';
+
 /**
- * Motor GSAP de pasos por sección a velocidad fija (independiente de la velocidad del scroll):
- * -------------------------------------------------------------------------------------------
- * Cada sección de la landing tiene un punto de parada (waypoint) concreto en el camino:
- *   - Sección 0 (Hero):            Doly espera fuera del borde izquierdo (offL).
- *   - Sección 1 (El Problema):     Doly entra caminando a velocidad fija hasta el 20% del camino y se detiene.
- *   - Sección 2 (¿Qué es?):        Doly avanza sus siguientes pasos a velocidad fija hasta el borde del libro y se detiene.
- *   - Sección 3 (¿Por qué?):       Doly sube al libro y reproduce el GIF de recostarse a 24 FPS fijos (1.25s).
- *   - Sección 4 (Funcionalidades): Doly reproduce el GIF de levantarse a 24 FPS fijos (1.25s) y avanza hasta el 80% del camino.
- *   - Sección 5 (CTA Final):       Doly camina a velocidad fija desde el 80% hasta salir por el borde derecho (offR).
- *
- * La velocidad de caminata (`WALK_PX_PER_SEC`) y los FPS de los 3 GIFs (`24 FPS`) son 100% fijos.
+ * Motor continuo de velocidad 100% constante para Doly (controlado por `gsap.ticker`):
+ * ------------------------------------------------------------------------------------
+ * 1. Sin paradas artificiales por sección:
+ *    Doly recorre un camino continuo `u` (0 -> 1) de izquierda a derecha pasando por el libro.
+ *    Solo se detiene cuando `u` alcanza el punto exacto donde el usuario dejó el scroll (`targetU`).
+ * 2. Velocidad invariante a la velocidad del scroll (tanto hacia abajo como hacia arriba):
+ *    `u` avanza hacia `targetU` a una tasa lineal fija (`SPEED_U_PER_SEC`), y el ciclo de patas
+ *    está acoplado físicamente a los píxeles recorridos (24 FPS fijos al avanzar, 0 FPS al parar).
+ * 3. Interacción natural hacia arriba y hacia abajo:
+ *    - Si ya salió por el extremo derecho y el usuario sube hacia el inicio, entra en loop desde la izquierda.
+ *    - Si el usuario sube el scroll a mitad del recorrido, Doly gira (`facing = -1`, `bookFlip = -1`) y
+ *      camina siempre hacia adelante a la misma velocidad constante (nunca retrocede en reversa).
  */
 export class DolyChoreography {
-  /** Velocidad horizontal fija de Doly en píxeles por segundo (no depende del scroll) */
-  private static readonly WALK_PX_PER_SEC = 310;
-  /** Cadencia fija de reproducción de los GIFs (24 cuadros por segundo) */
-  private static readonly GIF_FPS = 24;
-  /** Frame de parada cuando Doly se detiene de pie entre secciones (4 patas apoyadas) */
+  /** Velocidad lineal constante en unidades de recorrido por segundo */
+  private static readonly SPEED_U_PER_SEC = 0.175;
+  /** Frame de apoyo equilibrado cuando el usuario deja de hacer scroll a mitad de la caminata */
   private static readonly IDLE_STAND_FRAME = 3;
 
-  private activeSection = 0;
-  private tl?: gsap.core.Timeline;
-  private walkTickerActive = false;
-  private walkFrameCursor = DolyChoreography.IDLE_STAND_FRAME;
+  /** Tramos simétricos y continuos del recorrido */
+  private static readonly U_WALK_IN_START = 0.02;
+  private static readonly U_BOOK_LIE_START = 0.36;
+  private static readonly U_BOOK_MID = 0.5;
+  private static readonly U_WALK_OUT_START = 0.64;
+  private static readonly U_WALK_OUT_END = 0.98;
+
+  /** Rango activo del GIF de levantarse (frame 6..26, simétrico a ±235 unidades del lomo del libro) */
+  private static readonly STAND_ACTIVE_FIRST = 6;
+  private static readonly STAND_ACTIVE_LAST = 26;
+
+  private mapping: Mapping = 'forward';
+  private facing: 1 | -1 = 1;
+  private effTravelDir: 1 | -1 = 1;
+  private targetU = 0;
+  private u = 0;
+  private lastTargetU = 0;
+  private scrollDir: 1 | -1 = 1;
+  private isMoving = false;
+  private odometerUnits = 0;
+  private lastWorldX: number | null = null;
   private lastTickTime = 0;
+  private disposed = false;
 
-  /** Estado interno animado únicamente por tweens de GSAP a velocidad fija */
-  private readonly state = {
-    x: -300,
-    facing: 1 as 1 | -1,
-    mode: 'walk' as 'walk' | 'book',
-    bookFrameFloat: 60,
-    bookAlpha: 0,
-    bookScale: 0.88,
-  };
-
-  private readonly onTick = () => this.tickWalkFrames();
+  private readonly onTick = () => this.tick();
 
   constructor(
     private readonly manifest: SpriteManifest,
     private metrics: StageMetrics,
     private readonly onFrame?: (out: ChoreographyOutput) => void,
   ) {
-    this.state.x = this.offL;
-    this.state.bookFrameFloat = manifest.bookSeq.emptyBookFrame;
     this.lastTickTime = performance.now();
     gsap.ticker.add(this.onTick);
   }
 
   setMetrics(m: StageMetrics) {
-    const prevW = Math.max(1, this.metrics.width);
-    const ratio = this.state.x / prevW;
     this.metrics = m;
-    if (!this.tl || !this.tl.isActive()) {
-      this.state.x = this.waypointXForSection(this.activeSection);
-    } else {
-      this.state.x = ratio * m.width;
-    }
+    this.lastWorldX = null;
     this.emit();
   }
 
@@ -92,175 +93,116 @@ export class DolyChoreography {
     return this.metrics.width / 2 + this.manifest.bookSeq.exitDogOffsetX * this.metrics.k;
   }
 
-  /** Coordenada X del waypoint correspondiente a cada sección (0..5) */
-  private waypointXForSection(section: number): number {
-    const w = this.metrics.width;
-    switch (section) {
-      case 0:
-        return this.offL;
-      case 1:
-        return Math.min(w * 0.2, this.bookEntryX - 70 * this.metrics.k);
-      case 2:
-        return this.bookEntryX;
-      case 3:
-        return w / 2;
-      case 4:
-        return Math.max(w * 0.78, this.bookExitX + 55 * this.metrics.k);
-      case 5:
-      default:
-        return this.offR;
-    }
+  /** Actualiza la meta de progreso según el scroll del usuario (0..1) */
+  setTargetProgress(scrollProgress: number) {
+    const p = clamp01(scrollProgress);
+    if (p > this.lastTargetU + 1e-5) this.scrollDir = 1;
+    else if (p < this.lastTargetU - 1e-5) this.scrollDir = -1;
+    this.lastTargetU = p;
+    this.targetU = p;
   }
 
-  /**
-   * Dispara la transición a velocidad fija hacia el waypoint de la sección `targetSection` (0..5).
-   * Llamado únicamente cuando el usuario entra a una nueva sección.
-   */
-  goToSection(targetSection: number) {
-    if (targetSection === this.activeSection && this.tl) return;
-    const prevSection = this.activeSection;
-    this.activeSection = targetSection;
+  update(p: number): ChoreographyOutput {
+    this.setTargetProgress(p);
+    return this.buildOutput();
+  }
 
-    this.tl?.kill();
-    const b = this.manifest.bookSeq;
-    const tl = gsap.timeline({
-      onUpdate: () => this.emit(),
-      onComplete: () => {
-        this.walkTickerActive = false;
-        this.walkFrameCursor = DolyChoreography.IDLE_STAND_FRAME;
+  private tick() {
+    if (this.disposed) return;
+    const now = performance.now();
+    const dt = Math.min(0.05, Math.max(0.001, (now - this.lastTickTime) / 1000));
+    this.lastTickTime = now;
+
+    const diff = this.targetU - this.u;
+    const absDiff = Math.abs(diff);
+
+    if (absDiff < 0.0004) {
+      if (this.isMoving) {
+        this.u = this.targetU;
+        this.isMoving = false;
         this.emit();
-      },
-    });
-    this.tl = tl;
-
-    // Aparición / ocultamiento del libro en el centro a velocidad fija
-    const shouldShowBook = targetSection >= 1;
-    tl.to(
-      this.state,
-      {
-        bookAlpha: shouldShowBook ? 1 : 0,
-        bookScale: shouldShowBook ? 1 : 0.88,
-        duration: 0.55,
-        ease: 'power2.out',
-      },
-      0,
-    );
-
-    // Si Doly ya había salido por el extremo derecho (Sección 5) y el usuario regresa hacia el inicio (Sección 0 o 1),
-    // entra nuevamente desde el lado izquierdo (loop limpio de izquierda a derecha)
-    if (prevSection === 5 && this.state.x >= this.offR - 40 && targetSection <= 1) {
-      this.state.x = this.offL;
-      this.state.mode = 'walk';
-      this.state.bookFrameFloat = b.emptyBookFrame;
-    }
-
-    // Helper para agregar un tramo de caminata a velocidad constante (px/s fijos)
-    const addFixedSpeedWalk = (toX: number, fromXEstimate: number) => {
-      const dist = Math.abs(toX - fromXEstimate);
-      if (dist < 2) return;
-      const duration = Math.max(0.35, dist / DolyChoreography.WALK_PX_PER_SEC);
-      const dir: 1 | -1 = toX >= fromXEstimate ? 1 : -1;
-      tl.call(() => {
-        this.state.mode = 'walk';
-        this.state.bookFrameFloat = b.emptyBookFrame;
-        this.state.facing = dir;
-        this.walkTickerActive = true;
-      });
-      tl.to(this.state, {
-        x: toX,
-        duration,
-        ease: 'none', // Velocidad lineal 100% constante
-      });
-      tl.call(() => {
-        this.walkTickerActive = false;
-        this.walkFrameCursor = DolyChoreography.IDLE_STAND_FRAME;
-      });
-    };
-
-    // Helper para reproducir los 30 frames del GIF de recostarse en el libro a 24 FPS fijos (1.25s)
-    const addFixedSpeedLieDown = () => {
-      const duration = b.lieCount / DolyChoreography.GIF_FPS; // 30 / 24 = 1.25s fijos
-      tl.call(() => {
-        this.walkTickerActive = false;
-        this.state.mode = 'book';
-        this.state.bookFrameFloat = b.lieStart;
-      });
-      tl.to(this.state, {
-        bookFrameFloat: b.lieStart + b.lieCount - 1,
-        x: this.metrics.width / 2,
-        duration,
-        ease: 'none',
-      });
-    };
-
-    // Helper para reproducir los 30 frames del GIF de levantarse del libro a 24 FPS fijos (1.25s)
-    const addFixedSpeedStandUp = () => {
-      const duration = b.standCount / DolyChoreography.GIF_FPS; // 30 / 24 = 1.25s fijos
-      tl.call(() => {
-        this.walkTickerActive = false;
-        this.state.mode = 'book';
-        this.state.bookFrameFloat = b.standStart;
-      });
-      tl.to(this.state, {
-        bookFrameFloat: b.standStart + b.standCount - 1,
-        x: this.bookExitX,
-        duration,
-        ease: 'none',
-      });
-      tl.call(() => {
-        this.state.mode = 'walk';
-        this.state.bookFrameFloat = b.emptyBookFrame;
-        this.state.x = this.bookExitX;
-      });
-    };
-
-    let cursorX = this.state.x;
-
-    // 1. Si Doly está actualmente recostada en el libro (mode === 'book') y vamos a otra sección:
-    if (this.state.mode === 'book' && targetSection !== 3) {
-      addFixedSpeedStandUp();
-      cursorX = this.bookExitX;
-    }
-
-    // 2. Si el destino es la Sección 3 (recostarse en el libro):
-    if (targetSection === 3) {
-      if (this.state.mode !== 'book') {
-        addFixedSpeedWalk(this.bookEntryX, cursorX);
-        addFixedSpeedLieDown();
       }
       return;
     }
 
-    // 3. Si Doly está a la izquierda del libro y el usuario salta directo a una sección a la derecha del libro (4 o 5),
-    // pasa primero por el libro (camina -> se recuesta -> se levanta -> sigue caminando) a velocidad fija
-    const targetX = this.waypointXForSection(targetSection);
-    if (cursorX <= this.bookEntryX + 10 && targetSection >= 4) {
-      addFixedSpeedWalk(this.bookEntryX, cursorX);
-      addFixedSpeedLieDown();
-      addFixedSpeedStandUp();
-      cursorX = this.bookExitX;
+    this.isMoving = true;
+
+    const prevEffU = this.mapping === 'forward' ? this.u : this.mirrorU(this.u);
+
+    // Avance a velocidad ESTRICTAMENTE CONSTANTE
+    const fixedStep = DolyChoreography.SPEED_U_PER_SEC * dt;
+    const step = absDiff <= fixedStep ? diff : Math.sign(diff) * fixedStep;
+    this.u = clamp01(this.u + step);
+
+    // En los extremos fuera de pantalla, sincroniza el modo loop (forward/mirror)
+    const offscreen =
+      this.u <= DolyChoreography.U_WALK_IN_START || this.u >= DolyChoreography.U_WALK_OUT_END;
+    if (offscreen) {
+      this.mapping = this.scrollDir > 0 ? 'forward' : 'mirror';
+      this.facing = 1;
+      this.effTravelDir = 1;
+      this.lastWorldX = null;
     }
 
-    // 4. Camina a velocidad fija hasta el waypoint de la sección objetivo y se detiene
-    addFixedSpeedWalk(targetX, cursorX);
-  }
+    const curEffU = this.mapping === 'forward' ? this.u : this.mirrorU(this.u);
+    const dEff = curEffU - prevEffU;
+    if (Math.abs(dEff) > 1e-5) {
+      this.effTravelDir = dEff >= 0 ? 1 : -1;
+      this.facing = this.effTravelDir;
+    }
 
-  /** Compatibilidad para inicialización o modo movimiento reducido */
-  update(p: number): ChoreographyOutput {
-    return this.buildOutput();
-  }
+    const curX = this.computeWorldX(curEffU);
+    const inWalkSegment =
+      (curEffU > DolyChoreography.U_WALK_IN_START && curEffU < DolyChoreography.U_BOOK_LIE_START) ||
+      (curEffU > DolyChoreography.U_WALK_OUT_START && curEffU < DolyChoreography.U_WALK_OUT_END);
 
-  /** Avanza los 30 frames del GIF de caminata a 24 FPS fijos mientras Doly camina entre waypoints */
-  private tickWalkFrames() {
-    const now = performance.now();
-    const dt = Math.min(0.06, Math.max(0.001, (now - this.lastTickTime) / 1000));
-    this.lastTickTime = now;
+    if (this.lastWorldX !== null && inWalkSegment) {
+      const dx = curX - this.lastWorldX;
+      if (Math.abs(dx) < this.metrics.width * 0.4) {
+        this.odometerUnits += Math.abs(dx) / Math.max(0.1, this.metrics.k);
+      }
+    }
+    this.lastWorldX = curX;
 
-    if (!this.walkTickerActive) return;
-
-    const walkCount = this.manifest.ranges.walk.count;
-    this.walkFrameCursor = (this.walkFrameCursor + dt * DolyChoreography.GIF_FPS) % walkCount;
     this.emit();
+  }
+
+  private mirrorU(u: number): number {
+    const s = DolyChoreography.U_WALK_IN_START;
+    const e = DolyChoreography.U_WALK_OUT_END;
+    if (u <= s) return s;
+    if (u >= e) return s;
+    return s + (e - u);
+  }
+
+  private computeWorldX(effU: number): number {
+    const cx = this.metrics.width / 2;
+    if (effU <= DolyChoreography.U_WALK_IN_START) return this.offL;
+    if (effU < DolyChoreography.U_BOOK_LIE_START) {
+      const t =
+        (effU - DolyChoreography.U_WALK_IN_START) /
+        (DolyChoreography.U_BOOK_LIE_START - DolyChoreography.U_WALK_IN_START);
+      return lerp(this.offL, this.bookEntryX, clamp01(t));
+    }
+    if (effU < DolyChoreography.U_BOOK_MID) {
+      const t =
+        (effU - DolyChoreography.U_BOOK_LIE_START) /
+        (DolyChoreography.U_BOOK_MID - DolyChoreography.U_BOOK_LIE_START);
+      return lerp(this.bookEntryX, cx, clamp01(t));
+    }
+    if (effU < DolyChoreography.U_WALK_OUT_START) {
+      const t =
+        (effU - DolyChoreography.U_BOOK_MID) /
+        (DolyChoreography.U_WALK_OUT_START - DolyChoreography.U_BOOK_MID);
+      return lerp(cx, this.bookExitX, clamp01(t));
+    }
+    if (effU < DolyChoreography.U_WALK_OUT_END) {
+      const t =
+        (effU - DolyChoreography.U_WALK_OUT_START) /
+        (DolyChoreography.U_WALK_OUT_END - DolyChoreography.U_WALK_OUT_START);
+      return lerp(this.bookExitX, this.offR, clamp01(t));
+    }
+    return this.offR;
   }
 
   private emit() {
@@ -275,36 +217,67 @@ export class DolyChoreography {
     const walkStart = m.ranges.walk.start;
     const walkCount = m.ranges.walk.count;
 
-    const frame = this.walkTickerActive
-      ? walkStart + (Math.floor(this.walkFrameCursor) % walkCount)
-      : DolyChoreography.IDLE_STAND_FRAME;
+    const effU = this.mapping === 'forward' ? this.u : this.mirrorU(this.u);
+    const x = this.computeWorldX(effU);
 
-    const onBook = this.state.mode === 'book';
-    const bookFrame = onBook ? Math.round(this.state.bookFrameFloat) : b.emptyBookFrame;
-    const dogAlpha = onBook ? 0 : 1;
+    const walkCycleFrame = walkStart + (Math.floor((this.odometerUnits / 135) * walkCount) % walkCount);
+    const frame = this.isMoving ? walkCycleFrame : DolyChoreography.IDLE_STAND_FRAME;
 
-    const normX = Math.max(0, Math.min(1, this.state.x / Math.max(1, metrics.width)));
+    const bookAppear = clamp01(Math.max(this.u, this.targetU) / 0.04);
+    const bookScale = 0.92 + 0.08 * bookAppear;
+
+    const onBookSeq =
+      effU >= DolyChoreography.U_BOOK_LIE_START && effU <= DolyChoreography.U_WALK_OUT_START;
+
+    let bookFrame = b.emptyBookFrame;
+    let dogAlpha = 1;
+    let bookFlip: 1 | -1 = 1;
+
+    if (onBookSeq) {
+      dogAlpha = 0;
+      bookFlip = this.effTravelDir;
+      // Normalizamos el progreso dentro del libro (0 -> 1) en la dirección real en que Doly lo cruza:
+      // Así siempre sube al libro de frente (LIE 0..29) y luego se levanta de frente (STAND 6..26).
+      const rawBookT = clamp01(
+        (effU - DolyChoreography.U_BOOK_LIE_START) /
+          (DolyChoreography.U_WALK_OUT_START - DolyChoreography.U_BOOK_LIE_START),
+      );
+      const bookT = this.effTravelDir > 0 ? rawBookT : 1 - rawBookT;
+
+      if (bookT < 0.5) {
+        const t = clamp01(bookT / 0.5);
+        const idx = Math.min(29, Math.round(t * 29));
+        bookFrame = b.lieStart + idx;
+      } else {
+        const t = clamp01((bookT - 0.5) / 0.5);
+        const span = DolyChoreography.STAND_ACTIVE_LAST - DolyChoreography.STAND_ACTIVE_FIRST;
+        const idx = DolyChoreography.STAND_ACTIVE_FIRST + Math.min(span, Math.round(t * span));
+        bookFrame = b.standStart + idx;
+      }
+    }
+
+    const normX = clamp01(x / Math.max(1, metrics.width));
 
     return {
       visualProgress: normX,
       dog: {
-        x: this.state.x,
+        x,
         stageCenterX: metrics.width / 2,
         groundY: metrics.groundY,
         frame,
-        facing: this.state.facing,
+        facing: this.facing,
         alpha: dogAlpha,
         shadow: dogAlpha,
         bookFrame,
-        bookAlpha: this.state.bookAlpha,
-        bookScale: this.state.bookScale,
-        bookFlip: 1,
+        bookAlpha: bookAppear,
+        bookScale,
+        bookFlip,
       },
     };
   }
 
   destroy() {
-    this.tl?.kill();
+    this.disposed = true;
     gsap.ticker.remove(this.onTick);
   }
 }
