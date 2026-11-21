@@ -30,6 +30,15 @@ on:
           - staging
           - rehearsal
           - prod
+  # Reutilizable: el workflow `site-rc.yml` lo llama para desplegar la
+  # candidata en rehearsal y en staging, en ese orden (staging espera al
+  # smoke de rehearsal).
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Ambiente de destino'
+        required: true
+        type: string
 
 permissions:
   contents: read
