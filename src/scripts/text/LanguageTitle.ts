@@ -27,7 +27,7 @@ export class LanguageTitle {
   private readonly intervalSec = 3.2;
 
   constructor(
-    private readonly root: HTMLElement,
+    root: HTMLElement,
     private readonly languages: WelcomeLanguage[],
   ) {
     this.prefixEl = root.querySelector<HTMLElement>('[data-t-prefix]');
