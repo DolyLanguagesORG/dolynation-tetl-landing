@@ -3,7 +3,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { loadSpriteSheet } from '../character/CharacterAnimator';
 import { DolyWalkRenderer } from '../character/DolyWalkRenderer';
 import { DolyChoreography, type StageMetrics } from '../character/DolyChoreography';
-import { BEATS, clamp01, easeInOut, norm } from './beats';
+import { clamp01 } from './beats';
 import type { SceneController } from '../scene/SceneController';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -11,26 +11,21 @@ gsap.registerPlugin(ScrollTrigger);
 interface PrintItem {
   el: HTMLElement;
   xRatio: number; // 0..1
-  visitedAt: number;
-}
-
-interface ChapterRefs {
-  el: HTMLElement;
-  start: number;
-  end: number;
-  words: HTMLElement[];
-  body: HTMLElement | null;
-  rule: HTMLElement | null;
-  index: HTMLElement | null;
 }
 
 /**
- * Orquestador principal de la experiencia 3D Scrollytelling:
- * Conecta el progreso del scroll con:
- *  1. Línea del camino + huellas multilingües ("rastro de aprendizaje")
- *  2. Motor en <canvas> con los 3 GIFs de Doly (caminando, recostándose en el libro y levantándose)
- *  3. Capítulos editoriales con revelado palabra por palabra y notas de traducción
- *  4. Cámara 3D y escena monocromática en Three.js
+ * Orquestador principal por secciones (Velocidad fija con GSAP):
+ * --------------------------------------------------------------
+ * En lugar de que la velocidad de Doly dependa de qué tan rápido el usuario mueve el scroll:
+ *  - El recorrido se divide en 6 secciones:
+ *      0: Hero ("Bienvenido a DolyNation")
+ *      1: ¿Qué problema resuelve?
+ *      2: ¿Qué es DolyNation?
+ *      3: ¿Por qué elegir DolyNation? (Doly sube al libro y se recuesta)
+ *      4: Características y Funcionalidades (Doly se levanta del libro y avanza a la derecha)
+ *      5: Transición al CTA final (Doly termina de cruzar por el borde derecho)
+ *  - Al entrar a cada sección, GSAP dispara una animación a velocidad fija (`goToSection(index)`)
+ *    tanto para los pasos de Doly como para la entrada editorial de los textos y tarjetas.
  */
 export class MasterTimeline {
   private ctx?: gsap.Context;
@@ -40,6 +35,7 @@ export class MasterTimeline {
   private resizeObserver?: ResizeObserver;
   private visitedPrints = new Set<PrintItem>();
   private lastDogRatio: number | null = null;
+  private activeSection = -1;
 
   constructor(
     private readonly trackEl: HTMLElement,
@@ -68,7 +64,6 @@ export class MasterTimeline {
       this.renderer!.resize(stageRect.width, stageRect.height, dpr);
 
       const groundY = anchorRect.top - stageRect.top + anchorRect.width * 0.816;
-      // Escala basada en el ancho del libro (390 unidades en el GIF)
       const k = anchorRect.width / 355;
       this.renderer!.setScale(k);
 
@@ -79,24 +74,27 @@ export class MasterTimeline {
       };
     };
 
-    const updateTrailPrints = (dogX: number, p: number) => {
+    const prints: PrintItem[] = Array.from(this.stageEl.querySelectorAll<HTMLElement>('[data-print]')).map((el) => ({
+      el,
+      xRatio: Number(el.dataset.x || '0') / 100,
+    }));
+
+    const updateTrailPrints = (dogX: number) => {
       const stageWidth = Math.max(1, this.stageEl.clientWidth);
       const dogRatio = dogX / stageWidth;
-      const pathP = easeInOut(norm(p, BEATS.pathDraw));
-      if (p <= 0.02) {
+      if (this.activeSection <= 0 && dogRatio < 0) {
         this.visitedPrints.clear();
         prints.forEach((pr) => (pr.el.style.opacity = '0'));
       } else if (this.lastDogRatio !== null) {
         const minR = Math.min(this.lastDogRatio, dogRatio);
         const maxR = Math.max(this.lastDogRatio, dogRatio);
         for (const pr of prints) {
-          if (pr.xRatio >= minR - 0.015 && pr.xRatio <= maxR + 0.015) {
+          if (pr.xRatio >= minR - 0.02 && pr.xRatio <= maxR + 0.02) {
             this.visitedPrints.add(pr);
           }
           const dist = Math.abs(pr.xRatio - dogRatio);
           if (this.visitedPrints.has(pr)) {
-            const glow = dist < 0.08 ? 0.95 : 0.42;
-            pr.el.style.opacity = String(glow * pathP);
+            pr.el.style.opacity = dist < 0.08 ? '0.95' : '0.45';
           } else {
             pr.el.style.opacity = '0';
           }
@@ -104,124 +102,154 @@ export class MasterTimeline {
       }
       this.lastDogRatio = dogRatio;
       const dogXNorm = clamp01(dogRatio) * 2 - 1;
-      this.scene?.setProgress(p, dogXNorm);
+      this.scene?.setProgress(this.activeSection / 5, dogXNorm);
     };
 
     const initialMetrics = computeMetrics();
-    this.choreography = new DolyChoreography(manifest, initialMetrics, ({ dog, visualProgress }) => {
+    this.choreography = new DolyChoreography(manifest, initialMetrics, ({ dog }) => {
       this.renderer?.render(dog);
-      updateTrailPrints(dog.x, visualProgress);
+      updateTrailPrints(dog.x);
     });
 
-    const prints: PrintItem[] = Array.from(this.stageEl.querySelectorAll<HTMLElement>('[data-print]')).map((el) => ({
-      el,
-      xRatio: Number(el.dataset.x || '0') / 100,
-      visitedAt: -1,
-    }));
+    const chapters = Array.from(this.stageEl.querySelectorAll<HTMLElement>('[data-chapter]'));
+    const stepBtns = Array.from(this.stageEl.querySelectorAll<HTMLButtonElement>('[data-step-btn]'));
 
-    const chapterRefs: ChapterRefs[] = Array.from(this.stageEl.querySelectorAll<HTMLElement>('[data-chapter]')).map(
-      (el) => {
-        const [s, e] = (el.dataset.window || '0,1').split(',').map(Number);
-        return {
-          el,
-          start: s,
-          end: e,
-          words: Array.from(el.querySelectorAll<HTMLElement>('.word')),
-          body: el.querySelector<HTMLElement>('[data-chapter-body]'),
-          rule: el.querySelector<HTMLElement>('[data-chapter-rule]'),
-          index: el.querySelector<HTMLElement>('[data-chapter-index]'),
-        };
-      },
-    );
+    // Botones de la barra inferior de pasos: desplazan suavemente a la sección correspondiente
+    stepBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.stepBtn || '0');
+        const totalH = this.trackEl.scrollHeight - window.innerHeight;
+        const targetY = this.trackEl.offsetTop + (idx / 5.2) * totalH;
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+      });
+    });
+
+    const activateSection = (sectionIndex: number) => {
+      if (sectionIndex === this.activeSection) return;
+      this.activeSection = sectionIndex;
+
+      // 1. Actualiza pills de navegación de pasos
+      stepBtns.forEach((b) => {
+        b.classList.toggle('is-active', Number(b.dataset.stepBtn) === sectionIndex);
+      });
+
+      // 2. Línea del camino: se dibuja con velocidad fija al salir del Hero (section >= 1)
+      const showPath = sectionIndex >= 1;
+      if (pathLine) {
+        gsap.to(pathLine, {
+          scaleX: showPath ? 1 : 0,
+          opacity: showPath ? 1 : 0,
+          duration: 0.7,
+          ease: 'power2.out',
+          overwrite: true,
+        });
+      }
+      if (pathTicks) {
+        gsap.to(pathTicks, {
+          scaleX: showPath ? 1 : 0,
+          opacity: showPath ? 0.85 : 0,
+          duration: 0.7,
+          ease: 'power2.out',
+          overwrite: true,
+        });
+      }
+
+      // 3. Hero (visible en Sección 0)
+      if (heroEl) {
+        const isHero = sectionIndex === 0;
+        gsap.to(heroEl, {
+          autoAlpha: isHero ? 1 : 0,
+          y: isHero ? 0 : -28,
+          duration: 0.55,
+          ease: 'power2.out',
+          overwrite: true,
+        });
+      }
+      if (scrollCue) {
+        gsap.to(scrollCue, {
+          autoAlpha: sectionIndex === 0 ? 1 : 0,
+          duration: 0.4,
+          overwrite: true,
+        });
+      }
+
+      // 4. Animación editorial con GSAP de la sección activa (1..4)
+      chapters.forEach((ch) => {
+        const chIdx = Number(ch.dataset.sectionIndex);
+        const isCurrent = chIdx === sectionIndex;
+        const words = ch.querySelectorAll<HTMLElement>('.word');
+        const body = ch.querySelector<HTMLElement>('[data-chapter-body]');
+        const rule = ch.querySelector<HTMLElement>('[data-chapter-rule]');
+        const cards = ch.querySelectorAll<HTMLElement>('[data-chapter-card]');
+
+        if (isCurrent) {
+          gsap.killTweensOf([ch, words, body, rule, cards]);
+          gsap.set(ch, { autoAlpha: 1, pointerEvents: 'auto' });
+          if (rule) {
+            gsap.fromTo(rule, { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: 'power3.out' });
+          }
+          gsap.fromTo(
+            words,
+            { yPercent: 105 },
+            { yPercent: 0, duration: 0.65, stagger: 0.025, ease: 'power3.out' },
+          );
+          if (body) {
+            gsap.fromTo(
+              body,
+              { opacity: 0, y: 14 },
+              { opacity: 1, y: 0, duration: 0.55, delay: 0.12, ease: 'power2.out' },
+            );
+          }
+          if (cards.length) {
+            gsap.fromTo(
+              cards,
+              { opacity: 0, y: 22 },
+              { opacity: 1, y: 0, duration: 0.6, stagger: 0.08, delay: 0.16, ease: 'power2.out' },
+            );
+          }
+        } else {
+          gsap.to(ch, {
+            autoAlpha: 0,
+            pointerEvents: 'none',
+            duration: 0.35,
+            ease: 'power2.inOut',
+            overwrite: true,
+          });
+        }
+      });
+
+      // 5. Ordena a Doly avanzar sus pasos hacia el waypoint de esta sección a velocidad fija
+      this.choreography?.goToSection(sectionIndex);
+    };
 
     this.startTranslationNotesTicker();
 
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reducedMotion) {
-      const { dog } = this.choreography.update(0.52);
-      this.renderer.render(dog);
-      prints.forEach((p) => (p.el.style.opacity = '0.55'));
-      return;
-    }
-
-    const applyProgress = (p: number) => {
-      // 1. Barra superior de progreso
-      if (headerProgress) {
-        headerProgress.style.transform = `scaleX(${p.toFixed(4)})`;
-      }
-
-      // 2. Hero y cue de scroll al inicio (0.00 -> 0.11)
-      if (heroEl) {
-        const hOut = easeInOut(norm(p, BEATS.heroOut));
-        heroEl.style.opacity = String(1 - hOut);
-        heroEl.style.transform = `translate3d(0, ${(-hOut * 36).toFixed(1)}px, 0)`;
-        heroEl.style.visibility = hOut >= 0.99 ? 'hidden' : 'visible';
-      }
-      if (scrollCue) {
-        const cueOut = clamp01(p / 0.06);
-        scrollCue.style.opacity = String(1 - cueOut);
-      }
-
-      // 3. Línea del camino (empieza vacía en p=0 y se dibuja al iniciar el scroll)
-      const pathP = easeInOut(norm(p, BEATS.pathDraw));
-      if (pathLine) {
-        pathLine.style.transform = `scaleX(${pathP.toFixed(4)})`;
-        pathLine.style.opacity = String(pathP);
-      }
-      if (pathTicks) {
-        pathTicks.style.transform = `scaleX(${pathP.toFixed(4)})`;
-        pathTicks.style.opacity = String(pathP * 0.85);
-      }
-
-      // 4. Coreografía de los 3 GIFs de Doly a velocidad constante (controlada por gsap.ticker)
-      const { dog, visualProgress } = this.choreography!.update(p);
-      this.renderer!.render(dog);
-      updateTrailPrints(dog.x, visualProgress);
-
-      // 5. Capítulos editoriales sincronizados al tramo del recorrido
-      for (const ch of chapterRefs) {
-        if (p < ch.start || p > ch.end) {
-          ch.el.style.visibility = 'hidden';
-          ch.el.style.opacity = '0';
-          continue;
-        }
-        ch.el.style.visibility = 'visible';
-        const span = ch.end - ch.start;
-        const local = (p - ch.start) / span;
-        const enter = clamp01(local / 0.22);
-        const exit = clamp01((1 - local) / 0.2);
-        const vis = easeInOut(Math.min(enter, exit));
-
-        ch.el.style.opacity = vis.toFixed(3);
-        if (ch.rule) ch.rule.style.transform = `scaleX(${easeInOut(enter).toFixed(3)})`;
-        if (ch.index) {
-          ch.index.style.opacity = (vis * 0.45).toFixed(3);
-          ch.index.style.transform = `translate3d(0, ${((1 - vis) * 18).toFixed(1)}px, 0)`;
-        }
-        const totalWords = Math.max(1, ch.words.length);
-        ch.words.forEach((w, idx) => {
-          const wStart = (idx / totalWords) * 0.14;
-          const wEnter = easeInOut(clamp01((local - wStart) / 0.18));
-          const wVis = Math.min(wEnter, easeInOut(exit));
-          w.style.transform = `translate3d(0, ${((1 - wVis) * 105).toFixed(1)}%, 0)`;
-        });
-        if (ch.body) {
-          const bVis = easeInOut(Math.min(clamp01((local - 0.08) / 0.2), exit));
-          ch.body.style.opacity = bVis.toFixed(3);
-          ch.body.style.transform = `translate3d(0, ${((1 - bVis) * 14).toFixed(1)}px, 0)`;
-        }
-      }
-    };
-
     this.ctx = gsap.context(() => {
-      applyProgress(0);
+      if (pathLine) gsap.set(pathLine, { scaleX: 0, opacity: 0 });
+      if (pathTicks) gsap.set(pathTicks, { scaleX: 0, opacity: 0 });
+      activateSection(0);
 
+      // Divide el track en 6 tramos iguales (Secciones 0..5) y dispara activateSection cuando cambia el tramo
       ScrollTrigger.create({
         trigger: this.trackEl,
         start: 'top top',
         end: 'bottom bottom',
-        scrub: 0.6,
-        onUpdate: (self) => applyProgress(self.progress),
+        onUpdate: (self) => {
+          const p = self.progress;
+          if (headerProgress) {
+            headerProgress.style.transform = `scaleX(${p.toFixed(4)})`;
+          }
+          // Mapeo de progreso a sección (0..5)
+          let sec = 0;
+          if (p < 0.12) sec = 0;
+          else if (p < 0.31) sec = 1;
+          else if (p < 0.5) sec = 2;
+          else if (p < 0.69) sec = 3;
+          else if (p < 0.88) sec = 4;
+          else sec = 5;
+
+          activateSection(sec);
+        },
       });
 
       const ctaEl = document.querySelector<HTMLElement>('[data-cta]');
