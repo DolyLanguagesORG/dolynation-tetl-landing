@@ -16,6 +16,13 @@ mergearlo se crean el tag anotado y la GitHub Release. Ver
 > landing tiene la suya (`site_version`). Se pueden publicar por separado: un
 > retoque visual en la landing no obliga a subir la aplicación.
 
+## [0.1.1](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.1.0...v0.1.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* **landing:** permitir el host de la VPN en el servidor de desarrollo ([#10](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/10)) ([d5ee301](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/d5ee301ff4919173acb70e7fa14a8d56a32141c7)), closes [#9](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/9)
+
 ## [0.1.0](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.0.1...v0.1.0) (2026-11-21)
 
 
