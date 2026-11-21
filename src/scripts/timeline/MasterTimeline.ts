@@ -112,28 +112,12 @@ export class MasterTimeline {
     });
 
     const chapters = Array.from(this.stageEl.querySelectorAll<HTMLElement>('[data-chapter]'));
-    const stepBtns = Array.from(this.stageEl.querySelectorAll<HTMLButtonElement>('[data-step-btn]'));
-
-    // Botones de la barra inferior de pasos: desplazan suavemente a la sección correspondiente
-    stepBtns.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const idx = Number(btn.dataset.stepBtn || '0');
-        const totalH = this.trackEl.scrollHeight - window.innerHeight;
-        const targetY = this.trackEl.offsetTop + (idx / 5.2) * totalH;
-        window.scrollTo({ top: targetY, behavior: 'smooth' });
-      });
-    });
 
     const activateSection = (sectionIndex: number) => {
       if (sectionIndex === this.activeSection) return;
       this.activeSection = sectionIndex;
 
-      // 1. Actualiza pills de navegación de pasos
-      stepBtns.forEach((b) => {
-        b.classList.toggle('is-active', Number(b.dataset.stepBtn) === sectionIndex);
-      });
-
-      // 2. Línea del camino: se dibuja con velocidad fija al salir del Hero (section >= 1)
+      // 1. Línea del camino: se dibuja al salir del Hero (section >= 1)
       const showPath = sectionIndex >= 1;
       if (pathLine) {
         gsap.to(pathLine, {

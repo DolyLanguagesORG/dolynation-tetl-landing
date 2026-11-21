@@ -14,19 +14,13 @@ import { STORY_HEIGHT_VH } from '../scripts/timeline/beats';
   <Stage3D />
 
   <main>
-    <!-- Pista de scroll para la experiencia 3D Scrollytelling dividida por secciones -->
+    <!-- Pista de scroll para la experiencia 3D Scrollytelling -->
     <section
       id="story-track"
       class="relative w-full"
       style={`height: ${STORY_HEIGHT_VH}svh;`}
       aria-label="Recorrido interactivo DolyNation"
     >
-      <!-- Anclas de posición para las 4 secciones principales del recorrido -->
-      <div id="sec-problema" class="pointer-events-none absolute inset-x-0" style="top: 18%;"></div>
-      <div id="sec-que-es" class="pointer-events-none absolute inset-x-0" style="top: 38%;"></div>
-      <div id="sec-por-que" class="pointer-events-none absolute inset-x-0" style="top: 58%;"></div>
-      <div id="sec-funcionalidades" class="pointer-events-none absolute inset-x-0" style="top: 76%;"></div>
-
       <div id="story-stage" class="sticky top-0 h-svh w-full overflow-hidden">
         <HeroTitle />
         <StoryChapters />

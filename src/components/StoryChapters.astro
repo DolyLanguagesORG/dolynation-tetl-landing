@@ -3,31 +3,6 @@ import RichTitle from './RichTitle.astro';
 import { storySections } from '../data/landing';
 ---
 
-<!-- Indicador flotante de pasos del recorrido (sincronizado con los pasos de Doly) -->
-<div
-  class="pointer-events-auto absolute bottom-[3.2svh] left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-ink-700/80 bg-ink-950/85 px-3 py-1.5 backdrop-blur-md"
-  data-step-bar
->
-  <button
-    type="button"
-    class="step-pill is-active font-mono text-[10px] uppercase tracking-[0.18em]"
-    data-step-btn="0"
-  >
-    00 · Inicio
-  </button>
-  {
-    storySections.map((s, idx) => (
-      <button
-        type="button"
-        class="step-pill font-mono text-[10px] uppercase tracking-[0.18em]"
-        data-step-btn={idx + 1}
-      >
-        {s.index} · {s.navLabel}
-      </button>
-    ))
-  }
-</div>
-
 {
   storySections.map((s, idx) => (
     <article
@@ -39,12 +14,6 @@ import { storySections } from '../data/landing';
       <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-10">
         <!-- Columna izquierda: Encabezado editorial de la sección -->
         <div class="lg:col-span-5">
-          <div class="mb-3 flex flex-wrap items-center gap-3">
-            <span class="rounded-full border border-ink-600 bg-ink-950/70 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-ink-300">
-              {s.waypointLabel}
-            </span>
-          </div>
-
           <p class="mb-3 flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.26em] text-ink-400">
             <span class="text-ink-200">{s.index}</span>
             <span class="chapter-rule block h-px w-8 bg-ink-500" data-chapter-rule />
