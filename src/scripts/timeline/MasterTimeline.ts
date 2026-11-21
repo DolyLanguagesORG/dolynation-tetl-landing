@@ -224,7 +224,7 @@ export class MasterTimeline {
           this.choreography?.setTargetProgress(p);
 
           // Mapeo de progreso a sección editorial (0..5)
-          let sec = 0;
+          let sec: number;
           if (p < 0.12) sec = 0;
           else if (p < 0.31) sec = 1;
           else if (p < 0.5) sec = 2;

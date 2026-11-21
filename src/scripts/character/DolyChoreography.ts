@@ -20,33 +20,44 @@ export interface ChoreographyOutput {
 type Mapping = 'forward' | 'mirror';
 
 /**
- * Motor continuo de velocidad 100% constante para Doly (controlado por `gsap.ticker`):
- * ------------------------------------------------------------------------------------
- * 1. Sin paradas artificiales por sección:
- *    Doly recorre un camino continuo `u` (0 -> 1) de izquierda a derecha pasando por el libro.
- *    Solo se detiene cuando `u` alcanza el punto exacto donde el usuario dejó el scroll (`targetU`).
- * 2. Velocidad invariante a la velocidad del scroll (tanto hacia abajo como hacia arriba):
- *    `u` avanza hacia `targetU` a una tasa lineal fija (`SPEED_U_PER_SEC`), y el ciclo de patas
- *    está acoplado físicamente a los píxeles recorridos (24 FPS fijos al avanzar, 0 FPS al parar).
- * 3. Interacción natural hacia arriba y hacia abajo:
- *    - Si ya salió por el extremo derecho y el usuario sube hacia el inicio, entra en loop desde la izquierda.
- *    - Si el usuario sube el scroll a mitad del recorrido, Doly gira (`facing = -1`, `bookFlip = -1`) y
- *      camina siempre hacia adelante a la misma velocidad constante (nunca retrocede en reversa).
+ * Motor continuo de velocidad moderada y constante para Doly (controlado por `gsap.ticker`):
+ * ------------------------------------------------------------------------------------------
+ * - Cadencia moderada y natural (`GIF_FPS = 13` cuadros/segundo, ~2.3s por cada GIF de 30 frames):
+ *     * Caminata de entrada (0.02 -> 0.34): velocidad constante moderada (~3.4s) a 13 FPS.
+ *     * Recostarse en el libro (0.34 -> 0.50): 30 frames a 13 FPS (~2.3s).
+ *     * Levantarse del libro (0.50 -> 0.64): 21 frames activos a 13 FPS (~1.6s).
+ *     * Caminata de salida (0.64 -> 0.98): velocidad constante moderada (~3.5s) a 13 FPS.
+ * - Sin saltos de frame al hacer scroll moderado:
+ *     Cuando Doly alcanza momentáneamente el punto del scroll entre ticks de la rueda del mouse,
+ *     conserva exactamente el frame actual del ciclo (`walkFrameCursor`) en lugar de saltar a otro frame,
+ *     y al siguiente tick retoma desde el cuadro siguiente (0 -> 1 -> 2 ... -> 29).
  */
 export class DolyChoreography {
-  /** Velocidad lineal constante en unidades de recorrido por segundo */
-  private static readonly SPEED_U_PER_SEC = 0.175;
-  /** Frame de apoyo equilibrado cuando el usuario deja de hacer scroll a mitad de la caminata */
-  private static readonly IDLE_STAND_FRAME = 3;
+  /**
+   * Cadencia fija y moderada para los 3 GIFs (13 FPS = ~77ms por frame, muy cercano a los 100ms nativos del GIF).
+   * Garantiza que ni las patas ni las acciones sobre el libro se vean aceleradas.
+   */
+  private static readonly GIF_FPS = 13;
 
-  /** Tramos simétricos y continuos del recorrido */
+  /** Tramos continuos del recorrido */
   private static readonly U_WALK_IN_START = 0.02;
-  private static readonly U_BOOK_LIE_START = 0.36;
+  private static readonly U_BOOK_LIE_START = 0.34;
   private static readonly U_BOOK_MID = 0.5;
   private static readonly U_WALK_OUT_START = 0.64;
   private static readonly U_WALK_OUT_END = 0.98;
 
-  /** Rango activo del GIF de levantarse (frame 6..26, simétrico a ±235 unidades del lomo del libro) */
+  /**
+   * Velocidades lineales de `u` por segundo en cada tramo para que todas las acciones
+   * (caminar, recostarse y levantarse) duren exactamente su tiempo natural a 13 FPS:
+   *   - Caminar (tramo de 0.32): ~3.4s -> 0.094 u/s
+   *   - Recostarse (30 frames a 13 FPS = 2.31s en tramo de 0.16): 0.16 / 2.31 = 0.069 u/s
+   *   - Levantarse (21 frames a 13 FPS = 1.62s en tramo de 0.14): 0.14 / 1.62 = 0.086 u/s
+   */
+  private static readonly SPEED_U_WALK = 0.094;
+  private static readonly SPEED_U_LIE = 0.069;
+  private static readonly SPEED_U_STAND = 0.086;
+
+  /** Rango activo del GIF de levantarse (frames 6..26) */
   private static readonly STAND_ACTIVE_FIRST = 6;
   private static readonly STAND_ACTIVE_LAST = 26;
 
@@ -57,9 +68,7 @@ export class DolyChoreography {
   private u = 0;
   private lastTargetU = 0;
   private scrollDir: 1 | -1 = 1;
-  private isMoving = false;
-  private odometerUnits = 0;
-  private lastWorldX: number | null = null;
+  private walkFrameCursor = 0;
   private lastTickTime = 0;
   private disposed = false;
 
@@ -76,7 +85,6 @@ export class DolyChoreography {
 
   setMetrics(m: StageMetrics) {
     this.metrics = m;
-    this.lastWorldX = null;
     this.emit();
   }
 
@@ -107,6 +115,17 @@ export class DolyChoreography {
     return this.buildOutput();
   }
 
+  /** Velocidad constante de `u` según la acción actual (caminar, recostarse o levantarse) */
+  private getSegmentSpeed(effU: number): number {
+    if (effU >= DolyChoreography.U_BOOK_LIE_START && effU < DolyChoreography.U_BOOK_MID) {
+      return DolyChoreography.SPEED_U_LIE;
+    }
+    if (effU >= DolyChoreography.U_BOOK_MID && effU <= DolyChoreography.U_WALK_OUT_START) {
+      return DolyChoreography.SPEED_U_STAND;
+    }
+    return DolyChoreography.SPEED_U_WALK;
+  }
+
   private tick() {
     if (this.disposed) return;
     const now = performance.now();
@@ -116,22 +135,18 @@ export class DolyChoreography {
     const diff = this.targetU - this.u;
     const absDiff = Math.abs(diff);
 
-    if (absDiff < 0.0004) {
-      if (this.isMoving) {
-        this.u = this.targetU;
-        this.isMoving = false;
-        this.emit();
-      }
+    // Si Doly ya está en el punto exacto del scroll, mantiene su pose actual sin saltar de frame
+    if (absDiff < 0.00025) {
+      this.u = this.targetU;
       return;
     }
 
-    this.isMoving = true;
-
     const prevEffU = this.mapping === 'forward' ? this.u : this.mirrorU(this.u);
+    const segSpeed = this.getSegmentSpeed(prevEffU);
 
-    // Avance a velocidad ESTRICTAMENTE CONSTANTE
-    const fixedStep = DolyChoreography.SPEED_U_PER_SEC * dt;
-    const step = absDiff <= fixedStep ? diff : Math.sign(diff) * fixedStep;
+    // Avance a velocidad estrictamente moderada y constante para la acción actual
+    const maxStep = segSpeed * dt;
+    const step = absDiff <= maxStep ? diff : Math.sign(diff) * maxStep;
     this.u = clamp01(this.u + step);
 
     // En los extremos fuera de pantalla, sincroniza el modo loop (forward/mirror)
@@ -141,7 +156,6 @@ export class DolyChoreography {
       this.mapping = this.scrollDir > 0 ? 'forward' : 'mirror';
       this.facing = 1;
       this.effTravelDir = 1;
-      this.lastWorldX = null;
     }
 
     const curEffU = this.mapping === 'forward' ? this.u : this.mirrorU(this.u);
@@ -151,18 +165,17 @@ export class DolyChoreography {
       this.facing = this.effTravelDir;
     }
 
-    const curX = this.computeWorldX(curEffU);
     const inWalkSegment =
       (curEffU > DolyChoreography.U_WALK_IN_START && curEffU < DolyChoreography.U_BOOK_LIE_START) ||
       (curEffU > DolyChoreography.U_WALK_OUT_START && curEffU < DolyChoreography.U_WALK_OUT_END);
 
-    if (this.lastWorldX !== null && inWalkSegment) {
-      const dx = curX - this.lastWorldX;
-      if (Math.abs(dx) < this.metrics.width * 0.4) {
-        this.odometerUnits += Math.abs(dx) / Math.max(0.1, this.metrics.k);
-      }
+    if (inWalkSegment) {
+      // Avanza el ciclo de 30 frames exactamente a 13 FPS proporcional al paso efectivo dado en este tick:
+      // Nunca supera 13 FPS aunque el usuario haga scroll muy rápido, ni salta de frame al detenerse.
+      const stepRatio = Math.min(1, Math.abs(step) / Math.max(1e-6, maxStep));
+      const walkCount = this.manifest.ranges.walk.count;
+      this.walkFrameCursor = (this.walkFrameCursor + dt * DolyChoreography.GIF_FPS * stepRatio) % walkCount;
     }
-    this.lastWorldX = curX;
 
     this.emit();
   }
@@ -220,8 +233,8 @@ export class DolyChoreography {
     const effU = this.mapping === 'forward' ? this.u : this.mirrorU(this.u);
     const x = this.computeWorldX(effU);
 
-    const walkCycleFrame = walkStart + (Math.floor((this.odometerUnits / 135) * walkCount) % walkCount);
-    const frame = this.isMoving ? walkCycleFrame : DolyChoreography.IDLE_STAND_FRAME;
+    // Mantiene el frame continuo del ciclo sin saltar a otro frame al pausar entre ticks del scroll
+    const frame = walkStart + (Math.floor(this.walkFrameCursor) % walkCount);
 
     const bookAppear = clamp01(Math.max(this.u, this.targetU) / 0.04);
     const bookScale = 0.92 + 0.08 * bookAppear;
@@ -236,8 +249,6 @@ export class DolyChoreography {
     if (onBookSeq) {
       dogAlpha = 0;
       bookFlip = this.effTravelDir;
-      // Normalizamos el progreso dentro del libro (0 -> 1) en la dirección real en que Doly lo cruza:
-      // Así siempre sube al libro de frente (LIE 0..29) y luego se levanta de frente (STAND 6..26).
       const rawBookT = clamp01(
         (effU - DolyChoreography.U_BOOK_LIE_START) /
           (DolyChoreography.U_WALK_OUT_START - DolyChoreography.U_BOOK_LIE_START),

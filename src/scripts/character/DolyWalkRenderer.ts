@@ -8,7 +8,6 @@ import type { CharacterFrameState, CharacterRenderer, SpriteManifest } from './C
 export class DolyWalkRenderer implements CharacterRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   private k = 1;
-  private dpr = 1;
   private w = 0;
   private h = 0;
   private last = '';
@@ -27,7 +26,6 @@ export class DolyWalkRenderer implements CharacterRenderer {
   resize(width: number, height: number, dpr: number) {
     this.w = width;
     this.h = height;
-    this.dpr = dpr;
     this.canvas.width = Math.round(width * dpr);
     this.canvas.height = Math.round(height * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
