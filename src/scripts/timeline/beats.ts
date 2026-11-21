@@ -24,6 +24,25 @@ export const BEATS = {
   walkOut: [0.7, 0.94],
 } as const satisfies Record<string, Range>;
 
+/**
+ * Configuración de velocidad y fluidez constante de Doly (controlada por gsap.ticker).
+ * Independientemente de qué tan brusco o rápido gire la rueda del mouse el usuario,
+ * Doly avanza a esta velocidad constante y reproduce sus GIFs a estos FPS fijos.
+ */
+export const DOLY_SPEED = {
+  /** Cuadros por segundo fijos del GIF de caminata (30 frames -> 1.25s por ciclo a 24 FPS) */
+  walkFps: 24,
+  /** Cuadros por segundo fijos de los GIFs de recostarse y levantarse del libro */
+  bookFps: 24,
+  /**
+   * Velocidad lineal constante de avance de Doly a lo largo del recorrido (fracción de recorrido por segundo).
+   * 0.18 significa que recorrer todo el camino de extremo a extremo toma ~4.5 segundos de caminata fluida.
+   */
+  progressPerSec: 0.18,
+  /** Suavizado de desaceleración al llegar al punto objetivo del scroll */
+  arrivalSmoothing: 0.14,
+} as const;
+
 /** Altura del recorrido sticky (en vh). Más alto = scroll más lento. */
 export const STORY_HEIGHT_VH = 760;
 

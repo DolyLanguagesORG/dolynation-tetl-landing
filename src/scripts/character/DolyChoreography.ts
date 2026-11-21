@@ -1,6 +1,6 @@
 import { gsap } from 'gsap';
 import type { CharacterFrameState, SpriteManifest } from './CharacterAnimator';
-import { BEATS, easeInOut, inRange, lerp, norm } from '../timeline/beats';
+import { BEATS, DOLY_SPEED, clamp01, easeInOut, inRange, lerp, norm } from '../timeline/beats';
 
 export interface StageMetrics {
   /** ancho del stage en px */
@@ -13,45 +13,45 @@ export interface StageMetrics {
 
 export interface ChoreographyOutput {
   dog: CharacterFrameState;
+  /** progreso visual suavizado (0..1) que sigue a velocidad constante al scroll */
+  visualProgress: number;
 }
 
 type Mapping = 'forward' | 'mirror';
 
 /**
- * Orquestador con GSAP de los 3 GIFs de Doly:
- *   - walkIn (0.12 -> 0.36): Doly entra caminando (30 frames de doly-walk.webp) hasta el borde del libro.
- *   - settle (0.36 -> 0.50): Se reproducen los 30 frames del GIF donde Doly sube al libro y se recuesta.
- *   - rest   (0.50 -> 0.56): Doly descansa sobre el libro abierto (frame 29 de lie-down).
- *   - standUp(0.56 -> 0.70): Se reproducen los 30 frames del GIF donde Doly se levanta del libro y sale caminando.
- *   - walkOut(0.70 -> 0.94): Doly continúa caminando (30 frames de doly-walk.webp) hasta salir por la derecha.
- *   - Loop bidireccional: Si después de salir por la derecha haces scroll hacia arriba, el recorrido se espeja
- *     para que vuelva a entrar caminando desde la izquierda hacia la derecha.
+ * Motor GSAP de velocidad y fluidez constante para los 3 GIFs de Doly:
+ *  - Se ejecuta en `gsap.ticker` a 60/120 Hz midiendo `dt` real en segundos.
+ *  - Avanza el progreso visual del personaje (`visualP`) hacia el progreso del scroll (`targetP`)
+ *    a una velocidad máxima constante (`DOLY_SPEED.progressPerSec`), eliminando acelerones o
+ *    saltos bruscos de la rueda del mouse.
+ *  - Mientras Doly está en movimiento, reproduce los 30 frames del GIF de caminata a una
+ *    cadencia fija de `DOLY_SPEED.walkFps` (24 FPS) para que el ciclo de pasos sea 100% fluido.
  */
 export class DolyChoreography {
   private mapping: Mapping = 'forward';
   private facing: 1 | -1 = 1;
-  private lastP = 0;
-  private dir: 1 | -1 = 1;
-  private lastX: number | null = null;
-  private targetOdometer = 0;
-  private readonly anim = {
-    odometer: 0,
-    bookPlayhead: 0,
-  };
-  private currentP = 0;
-  private onAsyncUpdate?: (out: ChoreographyOutput) => void;
+  private targetP = 0;
+  private visualP = 0;
+  private lastTargetP = 0;
+  private scrollDir: 1 | -1 = 1;
+  private walkFrameCursor = 0; // acumulador continuo de frames a 24 FPS
+  private lastTickTime = 0;
+  private disposed = false;
+
+  private readonly onTick = () => this.tick();
 
   constructor(
     private readonly manifest: SpriteManifest,
     private metrics: StageMetrics,
-    onAsyncUpdate?: (out: ChoreographyOutput) => void,
+    private readonly onFrame?: (out: ChoreographyOutput) => void,
   ) {
-    this.onAsyncUpdate = onAsyncUpdate;
+    this.lastTickTime = performance.now();
+    gsap.ticker.add(this.onTick);
   }
 
   setMetrics(m: StageMetrics) {
     this.metrics = m;
-    this.lastX = null;
   }
 
   private get offL() {
@@ -77,71 +77,71 @@ export class DolyChoreography {
     return this.offR;
   }
 
+  /** Recibe el progreso objetivo del scroll (0..1) desde ScrollTrigger */
   update(p: number): ChoreographyOutput {
-    const { metrics } = this;
-    this.currentP = p;
+    if (p > this.lastTargetP + 1e-6) this.scrollDir = 1;
+    else if (p < this.lastTargetP - 1e-6) this.scrollDir = -1;
+    this.lastTargetP = p;
+    this.targetP = clamp01(p);
 
-    if (p > this.lastP + 1e-6) this.dir = 1;
-    else if (p < this.lastP - 1e-6) this.dir = -1;
-    this.lastP = p;
+    return this.buildOutput();
+  }
 
-    const offscreen = p <= BEATS.walkIn[0] || p >= BEATS.walkOut[1];
-    const resting = inRange(p, BEATS.rest);
+  /** Loop principal en gsap.ticker con velocidad constante */
+  private tick() {
+    if (this.disposed) return;
+    const now = performance.now();
+    const dt = Math.min(0.06, Math.max(0.001, (now - this.lastTickTime) / 1000));
+    this.lastTickTime = now;
+
+    const diff = this.targetP - this.visualP;
+    const absDiff = Math.abs(diff);
+
+    // Si Doly ya está en el destino del scroll, no gastamos CPU redibujando
+    if (absDiff < 0.0003) {
+      this.visualP = this.targetP;
+      return;
+    }
+
+    // 1. Avance a velocidad constante hacia targetP, con desaceleración suave al estar muy cerca
+    const maxStep = DOLY_SPEED.progressPerSec * dt;
+    const smoothStep = diff * DOLY_SPEED.arrivalSmoothing;
+    const step = Math.abs(smoothStep) < maxStep ? smoothStep : Math.sign(diff) * maxStep;
+    const prevVisualP = this.visualP;
+    this.visualP = clamp01(this.visualP + step);
+
+    // 2. Verifica cambio de modo (forward / mirror) en zonas seguras (fuera de pantalla o descansando en el libro)
+    const offscreen = this.visualP <= BEATS.walkIn[0] || this.visualP >= BEATS.walkOut[1];
+    const resting = inRange(this.visualP, BEATS.rest);
     if (offscreen || resting) {
-      this.mapping = this.dir > 0 ? 'forward' : 'mirror';
+      this.mapping = this.scrollDir > 0 ? 'forward' : 'mirror';
       this.facing = 1;
     }
 
-    // Si estamos en modo mirror (scroll hacia arriba después de haber salido por la derecha),
-    // invertimos el progreso local alrededor de la mitad del recorrido para que siempre entre por la izquierda,
-    // se recueste en el libro y salga por la derecha.
-    const effP = this.mapping === 'forward' ? p : this.mirrorProgress(p);
-    const x = this.forwardX(effP);
+    const prevEffP = this.mapping === 'forward' ? prevVisualP : this.mirrorProgress(prevVisualP);
+    const curEffP = this.mapping === 'forward' ? this.visualP : this.mirrorProgress(this.visualP);
+    const prevX = this.forwardX(prevEffP);
+    const curX = this.forwardX(curEffP);
+    const dx = curX - prevX;
 
-    const walking = offscreen || inRange(effP, BEATS.walkIn) || inRange(effP, BEATS.walkOut);
-    if (this.lastX !== null) {
-      const dx = x - this.lastX;
-      if (Math.abs(dx) < metrics.width * 0.5) {
-        this.targetOdometer += Math.abs(dx) / metrics.k;
-        if (walking && !offscreen && Math.abs(dx) > 0.05) {
-          this.facing = dx > 0 ? 1 : -1;
-        }
-      }
-    }
-    this.lastX = x;
-
-    // Calculamos el frame objetivo de la secuencia sobre el libro (0..59)
-    let targetBookPlayhead = this.anim.bookPlayhead;
-    if (inRange(effP, BEATS.settle)) {
-      targetBookPlayhead = norm(effP, BEATS.settle) * 29;
-    } else if (inRange(effP, BEATS.rest)) {
-      targetBookPlayhead = 29;
-    } else if (inRange(effP, BEATS.standUp)) {
-      targetBookPlayhead = 30 + norm(effP, BEATS.standUp) * 29;
+    const walking = inRange(curEffP, BEATS.walkIn) || inRange(curEffP, BEATS.walkOut);
+    if (walking && !offscreen && Math.abs(dx) > 0.02) {
+      this.facing = dx > 0 ? 1 : -1;
     }
 
-    // GSAP interpola suavemente tanto el ciclo de caminata como los 60 frames del libro
-    gsap.to(this.anim, {
-      odometer: this.targetOdometer,
-      bookPlayhead: targetBookPlayhead,
-      duration: 0.32,
-      ease: 'power2.out',
-      overwrite: true,
-      onUpdate: () => {
-        if (this.onAsyncUpdate) {
-          const curEffP = this.mapping === 'forward' ? this.currentP : this.mirrorProgress(this.currentP);
-          this.onAsyncUpdate(this.computeState(this.currentP, curEffP, this.forwardX(curEffP)));
-        }
-      },
-    });
+    // 3. Avanza el GIF de caminata a FPS constantes (24 FPS) mientras Doly se desplaza
+    if (walking && Math.abs(this.visualP - prevVisualP) > 0.0001) {
+      // Mantiene al menos 75% de la cadencia nominal de 24 FPS incluso al frenar suavemente
+      const speedRatio = Math.min(1.15, Math.max(0.75, Math.abs(step) / Math.max(1e-5, maxStep)));
+      this.walkFrameCursor =
+        (this.walkFrameCursor + dt * DOLY_SPEED.walkFps * speedRatio) % this.manifest.ranges.walk.count;
+    }
 
-    return this.computeState(p, effP, x);
+    if (this.onFrame) {
+      this.onFrame(this.buildOutput());
+    }
   }
 
-  /**
-   * Mapea el progreso al hacer scroll hacia arriba para que Doly repita el ciclo completo:
-   * entrar desde la izquierda -> recostarse en el libro -> levantarse -> salir por la derecha.
-   */
   private mirrorProgress(p: number): number {
     const start = BEATS.walkIn[0];
     const end = BEATS.walkOut[1];
@@ -150,20 +150,22 @@ export class DolyChoreography {
     return start + (end - p);
   }
 
-  private computeState(rawP: number, effP: number, x: number): ChoreographyOutput {
+  private buildOutput(): ChoreographyOutput {
     const { manifest: m, metrics } = this;
     const b = m.bookSeq;
     const walkStart = m.ranges.walk.start;
     const walkCount = m.ranges.walk.count;
 
-    const frame = walkStart + (Math.floor((this.anim.odometer / m.strideUnits) * walkCount) % walkCount);
-    const bookAppear = easeInOut(norm(rawP, BEATS.bookIn));
+    const effP = this.mapping === 'forward' ? this.visualP : this.mirrorProgress(this.visualP);
+    const x = this.forwardX(effP);
+
+    const frame = walkStart + (Math.floor(this.walkFrameCursor) % walkCount);
+    const bookAppear = easeInOut(norm(this.visualP, BEATS.bookIn));
     const bookScale = 0.88 + 0.12 * bookAppear;
 
-    // Determinamos si Doly está en la secuencia del libro (settle / rest / standUp) o caminando (walkIn / walkOut)
     const onBookSeq = effP >= BEATS.settle[0] && effP <= BEATS.standUp[1];
 
-    let bookFrame = b.emptyBookFrame; // 60 = libro abierto vacío
+    let bookFrame = b.emptyBookFrame;
     let dogAlpha = 1;
 
     if (onBookSeq) {
@@ -180,6 +182,7 @@ export class DolyChoreography {
     }
 
     return {
+      visualProgress: this.visualP,
       dog: {
         x,
         stageCenterX: metrics.width / 2,
@@ -194,5 +197,10 @@ export class DolyChoreography {
         bookFlip: 1,
       },
     };
+  }
+
+  destroy() {
+    this.disposed = true;
+    gsap.ticker.remove(this.onTick);
   }
 }

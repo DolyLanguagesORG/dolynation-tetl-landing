@@ -79,9 +79,38 @@ export class MasterTimeline {
       };
     };
 
+    const updateTrailPrints = (dogX: number, p: number) => {
+      const stageWidth = Math.max(1, this.stageEl.clientWidth);
+      const dogRatio = dogX / stageWidth;
+      const pathP = easeInOut(norm(p, BEATS.pathDraw));
+      if (p <= 0.02) {
+        this.visitedPrints.clear();
+        prints.forEach((pr) => (pr.el.style.opacity = '0'));
+      } else if (this.lastDogRatio !== null) {
+        const minR = Math.min(this.lastDogRatio, dogRatio);
+        const maxR = Math.max(this.lastDogRatio, dogRatio);
+        for (const pr of prints) {
+          if (pr.xRatio >= minR - 0.015 && pr.xRatio <= maxR + 0.015) {
+            this.visitedPrints.add(pr);
+          }
+          const dist = Math.abs(pr.xRatio - dogRatio);
+          if (this.visitedPrints.has(pr)) {
+            const glow = dist < 0.08 ? 0.95 : 0.42;
+            pr.el.style.opacity = String(glow * pathP);
+          } else {
+            pr.el.style.opacity = '0';
+          }
+        }
+      }
+      this.lastDogRatio = dogRatio;
+      const dogXNorm = clamp01(dogRatio) * 2 - 1;
+      this.scene?.setProgress(p, dogXNorm);
+    };
+
     const initialMetrics = computeMetrics();
-    this.choreography = new DolyChoreography(manifest, initialMetrics, ({ dog }) => {
+    this.choreography = new DolyChoreography(manifest, initialMetrics, ({ dog, visualProgress }) => {
       this.renderer?.render(dog);
+      updateTrailPrints(dog.x, visualProgress);
     });
 
     const prints: PrintItem[] = Array.from(this.stageEl.querySelectorAll<HTMLElement>('[data-print]')).map((el) => ({
@@ -144,35 +173,12 @@ export class MasterTimeline {
         pathTicks.style.opacity = String(pathP * 0.85);
       }
 
-      // 4. Coreografía de los 3 GIFs de Doly (caminata + recostarse en el libro + levantarse + salida + loop)
-      const { dog } = this.choreography!.update(p);
+      // 4. Coreografía de los 3 GIFs de Doly a velocidad constante (controlada por gsap.ticker)
+      const { dog, visualProgress } = this.choreography!.update(p);
       this.renderer!.render(dog);
+      updateTrailPrints(dog.x, visualProgress);
 
-      // 5. Rastro de huellas y palabras a medida que Doly pisa cada punto del camino
-      const stageWidth = Math.max(1, this.stageEl.clientWidth);
-      const dogRatio = dog.x / stageWidth;
-      if (p <= 0.02) {
-        this.visitedPrints.clear();
-        prints.forEach((pr) => (pr.el.style.opacity = '0'));
-      } else if (this.lastDogRatio !== null) {
-        const minR = Math.min(this.lastDogRatio, dogRatio);
-        const maxR = Math.max(this.lastDogRatio, dogRatio);
-        for (const pr of prints) {
-          if (pr.xRatio >= minR - 0.015 && pr.xRatio <= maxR + 0.015) {
-            this.visitedPrints.add(pr);
-          }
-          const dist = Math.abs(pr.xRatio - dogRatio);
-          if (this.visitedPrints.has(pr)) {
-            const glow = dist < 0.08 ? 0.95 : 0.42;
-            pr.el.style.opacity = String(glow * pathP);
-          } else {
-            pr.el.style.opacity = '0';
-          }
-        }
-      }
-      this.lastDogRatio = dogRatio;
-
-      // 6. Capítulos editoriales sincronizados al tramo del recorrido
+      // 5. Capítulos editoriales sincronizados al tramo del recorrido
       for (const ch of chapterRefs) {
         if (p < ch.start || p > ch.end) {
           ch.el.style.visibility = 'hidden';
@@ -205,10 +211,6 @@ export class MasterTimeline {
           ch.body.style.transform = `translate3d(0, ${((1 - bVis) * 14).toFixed(1)}px, 0)`;
         }
       }
-
-      // 7. Escena 3D en Three.js (avance de cámara + parallax con la posición de Doly)
-      const dogXNorm = clamp01(dogRatio) * 2 - 1;
-      this.scene?.setProgress(p, dogXNorm);
     };
 
     this.ctx = gsap.context(() => {
@@ -295,6 +297,7 @@ export class MasterTimeline {
   destroy() {
     if (this.xlateTimer) clearInterval(this.xlateTimer);
     this.resizeObserver?.disconnect();
+    this.choreography?.destroy();
     this.ctx?.revert();
     this.renderer?.dispose();
   }
