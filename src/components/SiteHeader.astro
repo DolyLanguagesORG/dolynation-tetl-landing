@@ -1,5 +1,6 @@
 ---
-import { brand, nav } from '../data/landing';
+import { brand, headerActions, nav } from '../data/landing';
+import { buildAppUrl } from '../lib/appUrls';
 ---
 
 <header class="site-header fixed inset-x-0 top-0 z-50" data-header>
@@ -29,12 +30,22 @@ import { brand, nav } from '../data/landing';
       }
     </nav>
 
-    <a
-      href="#cta"
-      class="rounded-full border border-ink-600 px-4 py-2 text-xs font-medium tracking-wide text-ink-100 transition-colors hover:border-ink-100 hover:bg-ink-100 hover:text-ink-950"
-    >
-      Empezar
-    </a>
+    <div class="flex items-center gap-4">
+      <a
+        href={buildAppUrl(headerActions.login.appPath)}
+        data-app-path={headerActions.login.appPath}
+        class="hidden text-xs font-medium tracking-wide text-ink-300 transition-colors hover:text-ink-100 sm:inline-block"
+      >
+        {headerActions.login.label}
+      </a>
+      <a
+        href={buildAppUrl(headerActions.signup.appPath)}
+        data-app-path={headerActions.signup.appPath}
+        class="rounded-full border border-ink-600 px-4 py-2 text-xs font-medium tracking-wide text-ink-100 transition-colors hover:border-ink-100 hover:bg-ink-100 hover:text-ink-950"
+      >
+        {headerActions.signup.label}
+      </a>
+    </div>
   </div>
   <!-- progreso global del recorrido -->
   <div class="absolute inset-x-0 bottom-0 h-px bg-ink-800">
