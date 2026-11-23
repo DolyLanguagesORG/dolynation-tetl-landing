@@ -23,7 +23,11 @@ import { buildAppUrl } from '../lib/appUrls';
     <nav class="hidden items-center gap-8 md:flex" aria-label="Principal">
       {
         nav.map((item) => (
-          <a href={item.href} class="nav-link text-sm text-ink-300 transition-colors hover:text-ink-100">
+          <a
+            href={item.href}
+            data-section-target={item.sectionIndex}
+            class="nav-link text-sm text-ink-300 transition-colors hover:text-ink-100"
+          >
             {item.label}
           </a>
         ))
@@ -34,16 +38,9 @@ import { buildAppUrl } from '../lib/appUrls';
       <a
         href={buildAppUrl(headerActions.login.appPath)}
         data-app-path={headerActions.login.appPath}
-        class="hidden text-xs font-medium tracking-wide text-ink-300 transition-colors hover:text-ink-100 sm:inline-block"
-      >
-        {headerActions.login.label}
-      </a>
-      <a
-        href={buildAppUrl(headerActions.signup.appPath)}
-        data-app-path={headerActions.signup.appPath}
         class="rounded-full border border-ink-600 px-4 py-2 text-xs font-medium tracking-wide text-ink-100 transition-colors hover:border-ink-100 hover:bg-ink-100 hover:text-ink-950"
       >
-        {headerActions.signup.label}
+        {headerActions.login.label}
       </a>
     </div>
   </div>
