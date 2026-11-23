@@ -25,6 +25,10 @@ on:
       - develop
       # La rama rc-<version> es la que se promueve a staging.
       - 'rc-*'
+      # La candidata DEL SITIO (site-rc-<version>): el sitio tiene su
+      # propio carril de release. El prefijo `site-` evita que choque con
+      # la rc de la aplicacion (que empuja a estos mismos workflows).
+      - 'site-rc-*'
     tags:
       - 'v*'
   workflow_dispatch:

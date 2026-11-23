@@ -16,6 +16,28 @@ mergearlo se crean el tag anotado y la GitHub Release. Ver
 > landing tiene la suya (`site_version`). Se pueden publicar por separado: un
 > retoque visual en la landing no obliga a subir la aplicación.
 
+## [0.2.1](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.2.0...v0.2.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **kanban:** el tablero se lee entero (pagina los items) ([#25](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/25)) ([219f068](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/219f068532e456270b8311ff67d0c94ed0b76b71))
+
+## [0.2.0](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.1.2...v0.2.0) (2026-11-23)
+
+
+### Features
+
+* **landing:** configura subdominios dolynation.app y enlaces por entorno ([#22](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/22)) ([525b1f1](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/525b1f1bd45ed8e8daf97cb81555139a0ba84d9f))
+
+## [0.1.2](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.1.1...v0.1.2) (2026-11-21)
+
+
+### Bug Fixes
+
+* **landing:** las cabeceras de seguridad se perdian en cada location ([#20](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/20)) ([78d4dbe](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/78d4dbe35055c97e730cc0de1e5bc58d8df5f84f))
+* **landing:** moderate Doly GIF animation speed to 13 FPS and condense copy ([#16](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/16)) ([fbe7ee1](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/fbe7ee152d76fa8e4de2dda27a7e5270dc18aafb))
+
 ## [0.1.1](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.1.0...v0.1.1) (2026-11-21)
 
 

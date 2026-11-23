@@ -14,7 +14,7 @@ name: deploy-dev
 # viven en un solo sitio.
 #
 # El ambiente de desarrollo de la landing va DENTRO de la VPN:
-# `devsite.yacaterkos.tech` -> IP de tunel, con TLS real.
+# `dev.dolynation.app` -> IP de tunel, con TLS real.
 
 on:
   push:

@@ -21,6 +21,12 @@ import { STORY_HEIGHT_VH } from '../scripts/timeline/beats';
       style={`height: ${STORY_HEIGHT_VH}svh;`}
       aria-label="Recorrido interactivo DolyNation"
     >
+      <!-- Marcadores semánticos de las 4 secciones del recorrido -->
+      <div id="problema" class="pointer-events-none absolute inset-x-0" style="top: 21%;"></div>
+      <div id="que-es" class="pointer-events-none absolute inset-x-0" style="top: 40%;"></div>
+      <div id="por-que" class="pointer-events-none absolute inset-x-0" style="top: 59%;"></div>
+      <div id="funcionalidades" class="pointer-events-none absolute inset-x-0" style="top: 78%;"></div>
+
       <div id="story-stage" class="sticky top-0 h-svh w-full overflow-hidden">
         <HeroTitle />
         <StoryChapters />
