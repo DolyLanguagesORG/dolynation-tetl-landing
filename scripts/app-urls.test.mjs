@@ -9,16 +9,12 @@ import {
 
 test('resolveAppBaseUrl maps known hostnames to environment app URLs', () => {
   assert.equal(
-    resolveAppBaseUrl({ hostname: 'devsite.dolynation.app' }),
-    'https://devweb.dolynation.app',
+    resolveAppBaseUrl({ hostname: 'dev.dolynation.app' }),
+    'https://devplay.dolynation.app',
   );
   assert.equal(
     resolveAppBaseUrl({ hostname: 'staging.dolynation.app' }),
-    'https://stagingweb.dolynation.app',
-  );
-  assert.equal(
-    resolveAppBaseUrl({ hostname: 'stagingsite.dolynation.app' }),
-    'https://stagingweb.dolynation.app',
+    'https://stagingplay.dolynation.app',
   );
   assert.equal(
     resolveAppBaseUrl({ hostname: 'dolynation.app' }),
@@ -44,20 +40,20 @@ test('resolveAppBaseUrl handles localhost and rehearsal ports', () => {
 test('resolveAppBaseUrl prioritizes runtimeOverride over envOverride and hostname', () => {
   assert.equal(
     resolveAppBaseUrl({
-      runtimeOverride: 'https://stagingweb.dolynation.app/',
-      envOverride: 'https://devweb.dolynation.app',
+      runtimeOverride: 'https://stagingplay.dolynation.app/',
+      envOverride: 'https://devplay.dolynation.app',
       hostname: 'dolynation.app',
     }),
-    'https://stagingweb.dolynation.app',
+    'https://stagingplay.dolynation.app',
   );
 
   assert.equal(
     resolveAppBaseUrl({
       runtimeOverride: '',
-      envOverride: 'https://devweb.dolynation.app/',
+      envOverride: 'https://devplay.dolynation.app/',
       hostname: 'dolynation.app',
     }),
-    'https://devweb.dolynation.app',
+    'https://devplay.dolynation.app',
   );
 });
 
@@ -74,11 +70,11 @@ test('resolveAppBaseUrl falls back to production URL for unknown hosts or invali
 
 test('buildAppUrl normalizes slashes cleanly', () => {
   assert.equal(
-    buildAppUrl('/register', 'https://devweb.dolynation.app/'),
-    'https://devweb.dolynation.app/register',
+    buildAppUrl('/register', 'https://devplay.dolynation.app/'),
+    'https://devplay.dolynation.app/register',
   );
   assert.equal(
-    buildAppUrl('login', 'https://stagingweb.dolynation.app'),
-    'https://stagingweb.dolynation.app/login',
+    buildAppUrl('login', 'https://stagingplay.dolynation.app'),
+    'https://stagingplay.dolynation.app/login',
   );
 });
