@@ -6,12 +6,12 @@ que trabajen en este repositorio.
 ## Qué es este repositorio
 
 La **landing pública** de DolyNation: el sitio que se ve en
-`yacaterkos.tech` y en `www.yacaterkos.tech`. Es un proyecto **Astro**
+`dolynation.app` y en `www.dolynation.app`. Es un proyecto **Astro**
 (salida estática) con una escena 3D de scroll (Three.js + GSAP + Lenis).
 
 No es la aplicación. La aplicación (backend + frontend) vive en
 `dolynation-atl-back` y `dolynation-tonatiuh-front`, y se sirve en
-`play.yacaterkos.tech`.
+`play.dolynation.app`.
 
 ## Skills de este repo
 
@@ -37,10 +37,10 @@ Cuando la tarea encaje con una skill, léela antes de actuar.
 
 - **Astro con salida estática**: `npm run build` genera `dist/`. No hay
   servidor de aplicaciones: la imagen final es `nginx:alpine` sirviendo `dist/`.
-- **Cero variables de entorno.** Al ser estático, una variable quedaría
-  congelada en la imagen y la misma imagen no serviría bien en todos los
-  ambientes. Si necesitas una URL, pídesela a quien mantiene la infraestructura:
-  el enlace a la aplicación se resuelve en el proxy del servidor (`/app`).
+- **Cero variables de entorno de build.** Al ser estático, una variable de build
+  quedaría congelada en la imagen y la misma imagen no serviría bien en todos
+  los ambientes. La URL hacia la aplicación se resuelve por hostname o mediante
+  `/runtime-config.js` generado en el arranque del contenedor vía `APP_BASE_URL`.
 - **El contenido vive en `src/data/landing.ts`**, no dentro de los componentes.
 
 ## Comandos

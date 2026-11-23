@@ -59,6 +59,8 @@ LABEL org.opencontainers.image.title="dolynation-tetl-landing" \
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx/landing.conf /etc/nginx/conf.d/default.conf
+COPY docker/40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
+RUN chmod +x /docker-entrypoint.d/40-runtime-config.sh
 
 # El healthcheck no necesita curl: nginx:alpine trae wget (busybox).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \

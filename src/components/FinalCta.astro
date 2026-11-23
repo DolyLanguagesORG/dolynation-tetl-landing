@@ -1,6 +1,7 @@
 ---
 import RichTitle from './RichTitle.astro';
-import { brand, cta, footer, trailWords, welcomeLanguages } from '../data/landing';
+import { brand, cta, footer, footerLinks, trailWords, welcomeLanguages } from '../data/landing';
+import { buildAppUrl } from '../lib/appUrls';
 
 const marquee = [...trailWords, ...trailWords];
 ---
@@ -20,14 +21,16 @@ const marquee = [...trailWords, ...trailWords];
 
     <div class="mt-10 flex flex-wrap items-center gap-4" data-cta-reveal>
       <a
-        href={cta.primary.href}
+        href={buildAppUrl(cta.primary.appPath)}
+        data-app-path={cta.primary.appPath}
         class="group inline-flex items-center gap-3 rounded-full bg-ink-100 px-7 py-4 text-sm font-semibold text-ink-950 transition-transform hover:-translate-y-0.5"
       >
         {cta.primary.label}
         <span class="inline-block transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
       </a>
       <a
-        href={cta.secondary.href}
+        href={buildAppUrl(cta.secondary.appPath)}
+        data-app-path={cta.secondary.appPath}
         class="inline-flex items-center gap-3 rounded-full border border-ink-600 px-7 py-4 text-sm font-medium text-ink-100 transition-colors hover:border-ink-100"
       >
         {cta.secondary.label}
@@ -66,6 +69,19 @@ const marquee = [...trailWords, ...trailWords];
   >
     <span>© {new Date().getFullYear()} {brand.name} · {brand.product}</span>
     <span>{footer.note}</span>
+    <nav class="flex flex-wrap items-center gap-5" aria-label="Legal y soporte">
+      {
+        footerLinks.map((link) => (
+          <a
+            href={buildAppUrl(link.appPath)}
+            data-app-path={link.appPath}
+            class="transition-colors hover:text-ink-200"
+          >
+            {link.label}
+          </a>
+        ))
+      }
+    </nav>
   </div>
 </footer>
 

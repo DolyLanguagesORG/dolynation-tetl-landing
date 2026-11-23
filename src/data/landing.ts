@@ -188,9 +188,20 @@ export const cta = {
   eyebrow: 'Supera el techo de aprendizaje',
   title: 'Empieza tu [camino|path|chemin|cammino|道] en DolyNation.',
   body: 'Elige tu nivel, lee en contexto y comprueba tu comprensión con IA.',
-  primary: { label: 'Comenzar ahora', href: '#' },
-  secondary: { label: 'Explorar idiomas', href: '#' },
+  primary: { label: 'Comenzar ahora', appPath: '/register' },
+  secondary: { label: 'Explorar idiomas', appPath: '/register' },
 };
+
+export const headerActions = {
+  login: { label: 'Iniciar sesión', appPath: '/login' },
+  signup: { label: 'Empezar', appPath: '/register' },
+};
+
+export const footerLinks = [
+  { label: 'Términos', appPath: '/terms' },
+  { label: 'Privacidad', appPath: '/privacy' },
+  { label: 'Soporte', appPath: '/support' },
+];
 
 export const nav = [
   { label: 'El Problema', href: '#story-track', sectionIndex: 1 },

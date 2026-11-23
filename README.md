@@ -1,14 +1,14 @@
 # `dolynation-tetl-landing`
 
 La **landing pública** de DolyNation: el sitio que se ve en
-`yacaterkos.tech` y en `www.yacaterkos.tech`.
+`dolynation.app` y en `www.dolynation.app`.
 
 Un proyecto **Astro** (salida estática) con una escena 3D de scroll
 (Three.js + GSAP + Lenis) y el personaje de Doly animado.
 
 > Esto **no** es la aplicación. La aplicación (backend + frontend) vive en
 > `dolynation-atl-back` y `dolynation-tonatiuh-front` y se sirve en
-> `play.yacaterkos.tech`.
+> `play.dolynation.app`.
 
 ## Qué hay dentro
 
@@ -63,7 +63,7 @@ develop ──PR + checks + 1 aprobación──► merge (squash)
 
 - La **imagen** se construye en GitHub Actions y se etiqueta con el **SHA**
   del commit (inmutable): el rollback es cambiar el SHA.
-- El **ambiente de desarrollo** va dentro de la VPN: `devsite.yacaterkos.tech`.
+- El **ambiente de desarrollo** va dentro de la VPN: `devsite.dolynation.app`.
 - La landing **no comparte versión con la aplicación**: la de la aplicación es
   `app_version` y la de la landing es `site_version`. Se pueden publicar por
   separado.

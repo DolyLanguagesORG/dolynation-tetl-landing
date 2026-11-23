@@ -23,13 +23,17 @@ const {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#1c1c1c" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://dolynation.app/" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content="/images/doly-book.webp" />
+    <link rel="canonical" href="https://dolynation.app/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preload" href="/sprites/doly-walk.webp" as="image" type="image/webp" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
+    <script is:inline src="/runtime-config.js"></script>
     <script is:inline>
       // Marca temprana para evitar parpadeos con movimiento reducido
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -39,5 +43,13 @@ const {
   </head>
   <body>
     <slot />
+    <script>
+      import { hydrateAppLinks } from '../lib/appUrls';
+
+      hydrateAppLinks();
+      document.addEventListener('astro:page-load', () => {
+        hydrateAppLinks();
+      });
+    </script>
   </body>
 </html>
