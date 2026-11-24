@@ -50,6 +50,7 @@ jobs:
     uses: ./.github/workflows/deploy-site.yml
     with:
       environment: rehearsal
+    secrets: inherit
 
   staging:
     name: Desplegar el sitio en staging
@@ -57,6 +58,7 @@ jobs:
     uses: ./.github/workflows/deploy-site.yml
     with:
       environment: staging
+    secrets: inherit
 
   promote:
     name: Abrir el PR de la candidata a main
