@@ -1,0 +1,33 @@
+{
+  "name": "DolyNation · Tetl — Lectura comprensiva de idiomas y retención por IA",
+  "short_name": "DolyNation",
+  "description": "Aprende idiomas leyendo en contexto con DolyNation: historias vivas, vocabulario y gramática dentro del texto, y evaluación inteligente por IA.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1c1c1c",
+  "theme_color": "#1c1c1c",
+  "lang": "es",
+  "categories": ["education", "books"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

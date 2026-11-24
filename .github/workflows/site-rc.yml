@@ -26,6 +26,7 @@ on:
 
 permissions:
   contents: read
+  deployments: write
   pull-requests: write
   issues: read
 
@@ -38,7 +39,7 @@ jobs:
     name: Verificar que no hay otra rc del sitio
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Guard
         run: |
           set -euo pipefail
@@ -50,6 +51,7 @@ jobs:
     uses: ./.github/workflows/deploy-site.yml
     with:
       environment: rehearsal
+    secrets: inherit
 
   staging:
     name: Desplegar el sitio en staging
@@ -57,6 +59,7 @@ jobs:
     uses: ./.github/workflows/deploy-site.yml
     with:
       environment: staging
+    secrets: inherit
 
   promote:
     name: Abrir el PR de la candidata a main

@@ -20,6 +20,26 @@ export const brand = {
   product: 'Tetl · Dolynglish',
 };
 
+export const seo = {
+  title: 'DolyNation · Tetl — Lectura comprensiva de idiomas y retención por IA',
+  description:
+    'Aprende idiomas leyendo en contexto con DolyNation: historias vivas, vocabulario y gramática dentro del texto, y evaluación inteligente por IA.',
+  ogImageAlt: 'DolyNation · Tetl — Plataforma editorial para aprender idiomas leyendo en contexto con IA',
+  keywords: [
+    'DolyNation',
+    'Dolynglish',
+    'Tetl',
+    'aprender idiomas leyendo',
+    'lectura comprensiva IA',
+    'vocabulario contextual',
+    'gramática en contexto',
+    'evaluación CEFR',
+    'comprensión lectora',
+  ],
+  themeColor: '#1c1c1c',
+  backgroundColor: '#1c1c1c',
+};
+
 export const welcomeLanguages: WelcomeLanguage[] = [
   { code: 'es', tag: 'ES', native: 'Español', prefix: 'Bienvenido a ', suffix: '' },
   { code: 'en', tag: 'EN', native: 'English', prefix: 'Welcome to ', suffix: '' },
@@ -189,12 +209,10 @@ export const cta = {
   title: 'Empieza tu [camino|path|chemin|cammino|道] en DolyNation.',
   body: 'Elige tu nivel, lee en contexto y comprueba tu comprensión con IA.',
   primary: { label: 'Comenzar ahora', appPath: '/register' },
-  secondary: { label: 'Explorar idiomas', appPath: '/register' },
 };
 
 export const headerActions = {
   login: { label: 'Iniciar sesión', appPath: '/login' },
-  signup: { label: 'Empezar', appPath: '/register' },
 };
 
 export const footerLinks = [
@@ -204,10 +222,10 @@ export const footerLinks = [
 ];
 
 export const nav = [
-  { label: 'El Problema', href: '#story-track', sectionIndex: 1 },
-  { label: '¿Qué es?', href: '#story-track', sectionIndex: 2 },
-  { label: '¿Por qué elegirnos?', href: '#story-track', sectionIndex: 3 },
-  { label: 'Funcionalidades', href: '#story-track', sectionIndex: 4 },
+  { label: 'El Problema', href: '#problema', sectionIndex: 1 },
+  { label: '¿Qué es?', href: '#que-es', sectionIndex: 2 },
+  { label: '¿Por qué elegirnos?', href: '#por-que', sectionIndex: 3 },
+  { label: 'Funcionalidades', href: '#funcionalidades', sectionIndex: 4 },
 ];
 
 export const footer = {

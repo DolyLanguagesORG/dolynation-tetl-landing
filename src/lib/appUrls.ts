@@ -4,7 +4,7 @@
  * ==================================================================
  *  La landing es un sitio estático (una imagen inmutable por SHA que
  *  se promueve de rehearsal -> staging -> prod). Por eso las URLs hacia
- *  la app (play / stagingweb / devweb / local) no se fijan en el build:
+ *  la app (play / stagingplay / devplay / local) no se fijan en el build:
  *  se resuelven en el siguiente orden de prioridad:
  *    1. `window.__DOLY_CONFIG__.appBaseUrl` (inyectado al arrancar el
  *       contenedor Docker en `/runtime-config.js` vía `APP_BASE_URL`).
@@ -19,9 +19,8 @@
 export const DEFAULT_PROD_APP_URL = 'https://play.dolynation.app';
 
 export const HOSTNAME_APP_URL_MAP: Record<string, string> = {
-  'devsite.dolynation.app': 'https://devweb.dolynation.app',
-  'staging.dolynation.app': 'https://stagingweb.dolynation.app',
-  'stagingsite.dolynation.app': 'https://stagingweb.dolynation.app',
+  'dev.dolynation.app': 'https://devplay.dolynation.app',
+  'staging.dolynation.app': 'https://stagingplay.dolynation.app',
   'dolynation.app': DEFAULT_PROD_APP_URL,
   'www.dolynation.app': DEFAULT_PROD_APP_URL,
 };

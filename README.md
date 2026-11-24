@@ -63,7 +63,7 @@ develop ──PR + checks + 1 aprobación──► merge (squash)
 
 - La **imagen** se construye en GitHub Actions y se etiqueta con el **SHA**
   del commit (inmutable): el rollback es cambiar el SHA.
-- El **ambiente de desarrollo** va dentro de la VPN: `devsite.dolynation.app`.
+- El **ambiente de desarrollo** va dentro de la VPN: `dev.dolynation.app`.
 - La landing **no comparte versión con la aplicación**: la de la aplicación es
   `app_version` y la de la landing es `site_version`. Se pueden publicar por
   separado.
