@@ -16,6 +16,19 @@ mergearlo se crean el tag anotado y la GitHub Release. Ver
 > landing tiene la suya (`site_version`). Se pueden publicar por separado: un
 > retoque visual en la landing no obliga a subir la aplicación.
 
+## [0.3.0](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.2.1...v0.3.0) (2026-11-24)
+
+
+### Features
+
+* **landing:** unifica subdominios a dev/devplay y staging/stagingplay ([#30](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/30)) ([8a5a3a0](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/8a5a3a02ae739ba09227c99df39ea769072910c5))
+
+
+### Bug Fixes
+
+* **ci:** corrige manifiesto de imagen, site-rc y release-please del sitio ([#33](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/33)) ([424620d](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/424620d7cc513afc82785ca33b4efa1c17e54ba6))
+* **landing:** fix section navigation anchors and keep only login and primary CTA buttons ([#32](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/32)) ([b489112](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/b489112f8ac21df9e255fb7f00f76c5de10c3288))
+
 ## [0.2.1](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.2.0...v0.2.1) (2026-11-23)
 
 
