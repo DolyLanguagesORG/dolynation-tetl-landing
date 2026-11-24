@@ -20,6 +20,8 @@ export class SceneController {
   private targetDogOffset = 0; // -1 (izq) a +1 (der)
   private currentDogOffset = 0;
   private disposed = false;
+  /** gama baja: menos partículas y menos resolución para no cargar el móvil */
+  private readonly light = window.matchMedia('(max-width: 767px)').matches || navigator.hardwareConcurrency <= 4;
 
   private readonly onTick = () => this.renderFrame();
   private readonly onResize = () => this.handleResize();
@@ -42,12 +44,12 @@ export class SceneController {
 
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: true,
+      antialias: !this.light,
       alpha: true,
       powerPreference: 'high-performance',
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(this.pixelRatio());
 
     this.buildHorizonGrid();
     this.buildOrbitalRings();
@@ -55,6 +57,12 @@ export class SceneController {
 
     gsap.ticker.add(this.onTick);
     window.addEventListener('resize', this.onResize, { passive: true });
+  }
+
+  /** DPR limitado: en gama baja basta con 1.5 (o menos) para que no se note */
+  private pixelRatio(): number {
+    const cap = this.light ? 1.5 : 2;
+    return Math.min(window.devicePixelRatio || 1, cap);
   }
 
   /** Plano de profundidad con líneas paralelas bajo el camino de Doly */
@@ -105,7 +113,7 @@ export class SceneController {
 
     const radii = [2.4, 3.8, 5.4];
     radii.forEach((radius, idx) => {
-      const segs = 72 + idx * 24;
+      const segs = (this.light ? 40 : 72) + idx * (this.light ? 12 : 24);
       const verts: number[] = [];
       for (let j = 0; j < segs; j++) {
         const theta = (j / segs) * Math.PI * 2;
@@ -128,7 +136,7 @@ export class SceneController {
 
   /** Partículas flotantes monocromáticas (como polvo de papel / glifos en el espacio) */
   private buildFloatingDust() {
-    const count = 220;
+    const count = this.light ? 70 : 220;
     const positions = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
       positions[i * 3] = (Math.random() - 0.5) * 22;
@@ -188,7 +196,7 @@ export class SceneController {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(this.pixelRatio());
   }
 
   dispose() {

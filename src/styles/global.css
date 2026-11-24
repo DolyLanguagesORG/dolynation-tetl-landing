@@ -30,18 +30,40 @@
 :root {
   --bg: #1c1c1c;
   /* posición vertical del camino dentro del stage sticky */
-  --ground-y: 80svh;
+  --ground-y: 81svh;
   /* ancho del ancla libro + Doly (proporción del recorte 375x321) */
-  --anchor-w: min(clamp(220px, 34vw, 440px), 44svh);
+  --anchor-w: min(clamp(220px, 32vw, 420px), 42svh);
   --anchor-ratio: 0.856; /* 321 / 375 */
   --anchor-ground: 0.816; /* 306 / 375 -> borde inferior del libro */
+  /* altura del recorrido scrollytelling */
+  --story-height: 420svh;
   color-scheme: dark;
+}
+
+/* Tablet */
+@media (max-width: 1023px) and (min-width: 641px) {
+  :root {
+    --ground-y: 84svh;
+    --anchor-w: min(clamp(190px, 30vw, 310px), 34svh);
+  }
+}
+
+/* Pantallas bajas (móvil en horizontal, portátil pequeño): el camino sube y el
+   libro se reduce para no chocar con los bloques de texto. */
+@media (max-height: 640px) {
+  :root {
+    --ground-y: 78svh;
+    --anchor-w: min(clamp(150px, 26vw, 280px), 34svh);
+  }
 }
 
 @media (max-width: 640px) {
   :root {
-    --ground-y: 78svh;
-    --anchor-w: min(62vw, 36svh);
+    /* el camino baja para que las tarjetas de la sección no tapen a Doly */
+    --ground-y: 88svh;
+    --anchor-w: min(39vw, 23svh);
+    /* en móvil el texto ocupa más alto: recorrido ágil y proporcionado */
+    --story-height: 400svh;
   }
 }
 
@@ -99,13 +121,14 @@ html.lenis body {
   position: relative;
   display: inline-block;
   white-space: nowrap;
+  line-height: 1.02;
 }
 .xlate::after {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0.06em;
+  bottom: 0.04em;
   height: 1px;
   background: currentColor;
   opacity: 0.35;
@@ -113,15 +136,15 @@ html.lenis body {
 .xlate__note {
   position: absolute;
   left: 0;
-  bottom: 100%;
+  bottom: calc(100% + 0.06rem);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   font-style: normal;
+  line-height: 1;
   letter-spacing: 0.08em;
   text-transform: lowercase;
   color: var(--color-ink-400);
   white-space: nowrap;
-  transform: translateY(-0.2rem);
 }
 
 /* marquee de saludos */

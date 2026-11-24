@@ -6,15 +6,15 @@ import { storySections } from '../data/landing';
 {
   storySections.map((s, idx) => (
     <article
-      class="chapter pointer-events-none absolute inset-x-0 top-[10.5svh] z-40 mx-auto w-full max-w-7xl px-6 md:px-10"
+      class="chapter pointer-events-none absolute inset-x-0 top-[9svh] z-40 mx-auto w-full max-w-7xl px-6 md:px-10 lg:top-[10.5svh]"
       data-chapter={s.id}
       data-section-index={idx + 1}
       aria-label={s.eyebrow}
     >
-      <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-10">
+      <div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 lg:gap-10">
         <!-- Columna izquierda: Encabezado editorial de la sección -->
         <div class="lg:col-span-5">
-          <p class="mb-3 flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.26em] text-ink-400">
+          <p class="mb-5 flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.26em] text-ink-400">
             <span class="text-ink-200">{s.index}</span>
             <span class="chapter-rule block h-px w-8 bg-ink-500" data-chapter-rule />
             <span>{s.eyebrow}</span>
@@ -23,7 +23,7 @@ import { storySections } from '../data/landing';
           <RichTitle
             text={s.title}
             as="h2"
-            class="chapter-title text-balance font-medium leading-[1.06] tracking-[-0.03em] text-ink-100"
+            class="chapter-title text-balance font-medium leading-[1.42] tracking-[-0.03em] text-ink-100"
           />
 
           <p class="mt-3.5 text-sm leading-relaxed text-ink-300 md:text-base" data-chapter-body>
@@ -45,22 +45,20 @@ import { storySections } from '../data/landing';
         <div class="lg:col-span-7">
           {s.cards && (
             <div
-              class={`grid gap-3.5 ${
-                s.cards.length === 4
-                  ? 'grid-cols-1 sm:grid-cols-2'
-                  : s.cards.length === 3
-                    ? 'grid-cols-1 md:grid-cols-3'
-                    : 'grid-cols-1 sm:grid-cols-2'
+              class={`grid grid-cols-2 gap-2.5 sm:gap-3.5 ${
+                s.cards.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
               }`}
             >
               {s.cards.map((card) => (
                 <div
-                  class="chapter-card rounded-xl border border-ink-700/80 bg-ink-950/75 p-4 backdrop-blur-sm"
+                  class={`chapter-card rounded-xl border border-ink-700/80 bg-ink-950/75 p-3 backdrop-blur-sm sm:p-4 ${
+                    s.cards!.length === 3 ? 'last:col-span-2 sm:last:col-span-1' : ''
+                  }`}
                   data-chapter-card
                 >
                   <span class="block font-mono text-[10px] uppercase tracking-[0.2em] text-ink-400">{card.tag}</span>
-                  <h3 class="mt-1.5 text-base font-semibold tracking-tight text-ink-100">{card.title}</h3>
-                  <p class="mt-1.5 text-xs leading-relaxed text-ink-300 md:text-sm">{card.description}</p>
+                  <h3 class="mt-1.5 text-sm font-semibold tracking-tight text-ink-100 sm:text-base">{card.title}</h3>
+                  <p class="mt-1.5 text-[11px] leading-relaxed text-ink-300 sm:text-xs md:text-sm">{card.description}</p>
                 </div>
               ))}
             </div>

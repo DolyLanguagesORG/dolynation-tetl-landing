@@ -1,6 +1,7 @@
 ---
 import { brand, headerActions, nav } from '../data/landing';
 import { buildAppUrl } from '../lib/appUrls';
+import { CHECKPOINTS } from '../scripts/timeline/beats';
 ---
 
 <header class="site-header fixed inset-x-0 top-0 z-50" data-header>
@@ -20,17 +21,19 @@ import { buildAppUrl } from '../lib/appUrls';
       </span>
       <span class="text-sm font-semibold tracking-tight text-ink-100">
         {brand.name}
-        <span class="ml-1 font-mono text-[10px] font-normal uppercase tracking-[0.2em] text-ink-500">{brand.product}</span>
+        <span class="ml-1 hidden font-mono text-[10px] font-normal uppercase tracking-[0.2em] text-ink-500 lg:inline"
+          >{brand.product}</span
+        >
       </span>
     </a>
 
-    <nav class="hidden items-center gap-8 md:flex" aria-label="Principal">
+    <nav class="hidden items-center gap-5 md:flex lg:gap-8" aria-label="Principal">
       {
         nav.map((item) => (
           <a
             href={item.href}
             data-section-target={item.sectionIndex}
-            class="nav-link text-sm text-ink-300 transition-colors hover:text-ink-100"
+            class="nav-link whitespace-nowrap text-xs text-ink-300 transition-colors hover:text-ink-100 lg:text-sm"
           >
             {item.label}
           </a>
@@ -42,15 +45,25 @@ import { buildAppUrl } from '../lib/appUrls';
       <a
         href={buildAppUrl(headerActions.login.appPath)}
         data-app-path={headerActions.login.appPath}
-        class="rounded-full border border-ink-600 px-4 py-2 text-xs font-medium tracking-wide text-ink-100 transition-colors hover:border-ink-100 hover:bg-ink-100 hover:text-ink-950"
+        class="whitespace-nowrap rounded-full border border-ink-600 px-4 py-2 text-xs font-medium tracking-wide text-ink-100 transition-colors hover:border-ink-100 hover:bg-ink-100 hover:text-ink-950"
       >
         {headerActions.login.label}
       </a>
     </div>
   </div>
-  <!-- progreso global del recorrido -->
+  <!-- progreso global del recorrido con los 4 checkpoints -->
   <div class="absolute inset-x-0 bottom-0 h-px bg-ink-800">
     <div class="h-full origin-left scale-x-0 bg-ink-300" data-scroll-progress></div>
+    {
+      nav.map((item, idx) => (
+        <span
+          class="checkpoint-pip"
+          data-checkpoint-pip={item.sectionIndex}
+          style={`left: ${(CHECKPOINTS[idx] ?? 0.2 + idx * 0.2) * 100}%;`}
+          aria-hidden="true"
+        />
+      ))
+    }
   </div>
 </header>
 
@@ -73,8 +86,31 @@ import { buildAppUrl } from '../lib/appUrls';
     transform-origin: right;
     transition: transform 0.5s var(--ease-out-expo);
   }
-  .nav-link:hover::after {
+  .nav-link:hover::after,
+  .nav-link.is-active::after {
     transform: scaleX(1);
     transform-origin: left;
+  }
+  .nav-link.is-active {
+    color: var(--color-ink-100);
+  }
+  .checkpoint-pip {
+    position: absolute;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    border-radius: 9999px;
+    transform: translate(-50%, -50%) scale(0.8);
+    background: var(--color-ink-600);
+    transition:
+      background-color 0.35s ease,
+      transform 0.35s var(--ease-out-expo);
+  }
+  .checkpoint-pip.is-passed {
+    background: var(--color-ink-300);
+  }
+  .checkpoint-pip.is-active {
+    background: var(--color-ink-100);
+    transform: translate(-50%, -50%) scale(1.25);
   }
 </style>
