@@ -25,14 +25,37 @@ Deliver a lightweight, zero-video, zero-GIF interactive animation of Doly walkin
 
 ## Choreography Timeline (`progress: 0.0 -> 1.0`)
 
-| Progress Range | Beat | Visual Behavior |
-| :--- | :--- | :--- |
-| `0.00 – 0.12` | **Stage Entry** | Screen starts dark and minimal. The straight horizontal path line draws from left to right (`stroke-dashoffset` or canvas line). The open book fades/opens gently at the center (`x = 50%`). |
-| `0.12 – 0.55` | **Walk In (Left → Center)** | Doly enters from off-screen left (`x = -12%`) and walks along the straight line to the book (`x = 50%`). Walk-cycle frames advance strictly with scroll delta (no auto-loop when user stops scrolling). |
-| `0.55 – 0.72` | **Settle on the Book** | Doly transitions from walking posture to resting her front paws on the open book, resolving into the exact reference pose. |
-| `0.72 – 1.00` | **Reveal / Continuation** | Subtle 3D camera push-in, brand/hero copy reveal (or optional continuation walking off toward the right edge, depending on final narrative choice). |
+The stops live in `src/scripts/timeline/beats.ts` (`STOPS` + `SECTION_STOPS`)
+and are driven by the physical finite-state machine in `DolyChoreography` across
+**3 synchronized sprite sheets** (`doly-walk.webp`, `doly-sit-ground.webp`,
+`doly-book-seq.webp`):
+
+| Progress Range | Stop / Corridor | State | Visual Behavior |
+| :--- | :--- | :--- | :--- |
+| `0.00 – 0.02` | **Hero** | `offLeft` | Doly waits off-screen left (`0vw`). |
+| `0.02 – 0.14` | **Walk In** | `walkLeftLane` | Doly walks cleanly into screen toward the left ground checkpoint (with 100%-opaque pivot turn on mid-path reversal). |
+| `0.14 – 0.25` | **Parada 1 · El Problema (`0.20`)** | `sitLeft` | Sits on the ground left of the book looking forward (`0.55s` checkpoint dwell). |
+| `0.25 – 0.44` | **Approach & Climb / Step Off (L)** | `walkToBook` ↔ `climbLeft` / `stepOffLeft` | Forward: stands up, walks to book, climbs (`LIE 0→20`). Reverse: steps off left (`STAND 11→26`, mirrored, 100% opaque), walks left, sits on ground. |
+| `0.44` | **Parada 2 · ¿Qué es? (`0.44`)** | `bookSit` | Seated upright on top of the open book (`LIE 20`, `0.55s` checkpoint dwell). |
+| `0.44 – 0.53` | **Lie Down / Sit Up** | `bookLieTrans` | Smoothly lowers onto or sits back up from the pages (`LIE 20↔29`) without spurious reversal turns. |
+| `0.53` | **Parada 3 · ¿Por qué elegirnos? (`0.53`)** | `bookLie` | Resting lying down on top of the open book (`LIE 29`, `0.55s` checkpoint dwell). |
+| `0.53 – 0.74` | **Step Off / Climb (R)** | `stepOffRight` / `climbRight` ↔ `walkFromBook` | Forward: wakes and steps off right (`LIE 29→27` → `STAND 2→26`, 100% opaque), walks to right stop. Reverse: walks left and climbs from the right (`LIE 0→29`, mirrored). |
+| `0.74 – 0.85` | **Parada 4 · Funcionalidades (`0.80`)** | `sitRight` | Seated on the ground right of the open book (`0.55s` checkpoint dwell). |
+| `0.85 – 1.00` | **Walk Out** | `walkRightLane` → `offRight` | Stands up and exits calmly off the right edge into Zone 2 `<FinalCta />` (or enters from right when scrolling up). |
+
+## One Plane, Three Sheets
+
+The three sheets are measured directly from the source GIFs by `npm run sprites`:
+
+- `walkScale` — matches `doly-walk.webp` height to Doly's standing height in the book & sit sheets.
+- `sitSeq` (`doly-sit-ground.webp`) — 9 sit frames extracted cleanly from `LIE 12..20` plus 3 head-locked turn poses (`9..11`) with the open book removed, scaled (`~1.136`) to match `walk` height 1:1, and `bookSitScale`/`bookSitGroundOffsetY` matched to `LIE[20]` on the book.
+- All 61 frames of `doly-book-seq.webp` (`LIE[0..29]` dog-only, `STAND[0..29]` dog-only, `EMPTY[60]` canonical open book) are normalized to the exact outer cover width (`358px` target / `361px` with stroke) and flat cover baseline (`BOOK_GROUND_Y`). `DolyWalkRenderer` renders canonical `EMPTY[60]` once underneath dog-only frames `0..59` at 100% opacity so the book never resizes, shifts, bleeds through, or flashes over white pages.
 
 ## Bidirectional Scroll UX
-- Track `direction` from GSAP `ScrollTrigger` (`1` = forward/down, `-1` = backward/up).
-- When `direction === -1` during the walking segment, horizontally flip the character (`scaleX(-1)` or canvas `ctx.scale(-1, 1)`) so Doly turns around and walks back toward the left naturally instead of moonwalking.
+- The pose is a pure function of the internal progress `u`, so scrolling up
+  rewinds the whole performance (Doly stands up, sits, lies down and walks
+  back to the left) instead of replaying it from the start.
+- Never mirror the progress. Only mirror the sprite (`ctx.scale(facing, 1)`)
+  when the travel direction changes, so Doly turns around instead of moonwalking.
 - When scroll stops (`velocity === 0`), hold the current frame cleanly without jitter.
+- Transitions between sheets are cross-fades (`BLEND` in `beats.ts`), never hard cuts.

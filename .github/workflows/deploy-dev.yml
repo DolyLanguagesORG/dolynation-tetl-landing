@@ -1,0 +1,53 @@
+name: deploy-dev
+
+# Despliega la LANDING al ambiente de DESARROLLO cuando se mergea a
+# `develop`.
+#
+# El despliegue NO se hace desde aqui: este repo no tiene (ni tendra) los
+# secrets de SSH. Lo que hace este workflow es **avisar** al repo de
+# infraestructura, que es el dueño del servidor y de los scripts de
+# despliegue. El `dolynation-tlalli-infra` recibe el aviso y ejecuta
+# `scripts/deploy-dev-landing.sh` por SSH.
+#
+# Es el mismo camino que usa `sync-versions` para el manifiesto de versiones:
+# la landing avisa, la infraestructura ejecuta. Asi los secrets de despliegue
+# viven en un solo sitio.
+#
+# El ambiente de desarrollo de la landing va DENTRO de la VPN:
+# `dev.dolynation.app` -> IP de tunel, con TLS real.
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev-landing
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Avisar a infraestructura del despliegue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notificar el despliegue a la infraestructura
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          REF: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Falta RELEASE_PLEASE_TOKEN en este repositorio."
+            exit 1
+          fi
+
+          gh api "repos/DolyLanguagesORG/dolynation-tlalli-infra/dispatches" \
+            -f event_type=deploy-landing \
+            -f "client_payload[repository]=${{ github.event.repository.name }}" \
+            -f "client_payload[ref]=$REF"
+
+          echo "Infraestructura avisada del despliegue de $REF."

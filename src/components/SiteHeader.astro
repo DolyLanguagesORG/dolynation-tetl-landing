@@ -1,0 +1,116 @@
+---
+import { brand, headerActions, nav } from '../data/landing';
+import { buildAppUrl } from '../lib/appUrls';
+import { CHECKPOINTS } from '../scripts/timeline/beats';
+---
+
+<header class="site-header fixed inset-x-0 top-0 z-50" data-header>
+  <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 md:px-10">
+    <a href="/" class="group flex items-center gap-3" aria-label={`${brand.name} inicio`}>
+      <span class="grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-ink-600 bg-ink-950/70 p-1 transition-colors group-hover:border-ink-200">
+        <img
+          src="/images/dolynation-cara-frente-sticker-plano.png"
+          alt=""
+          width="36"
+          height="36"
+          class="h-full w-full object-contain"
+          aria-hidden="true"
+          loading="eager"
+          decoding="async"
+        />
+      </span>
+      <span class="text-sm font-semibold tracking-tight text-ink-100">
+        {brand.name}
+        <span class="ml-1 hidden font-mono text-[10px] font-normal uppercase tracking-[0.2em] text-ink-500 lg:inline"
+          >{brand.product}</span
+        >
+      </span>
+    </a>
+
+    <nav class="hidden items-center gap-5 md:flex lg:gap-8" aria-label="Principal">
+      {
+        nav.map((item) => (
+          <a
+            href={item.href}
+            data-section-target={item.sectionIndex}
+            class="nav-link whitespace-nowrap text-xs text-ink-300 transition-colors hover:text-ink-100 lg:text-sm"
+          >
+            {item.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="flex items-center gap-4">
+      <a
+        href={buildAppUrl(headerActions.login.appPath)}
+        data-app-path={headerActions.login.appPath}
+        class="whitespace-nowrap rounded-full border border-ink-600 px-4 py-2 text-xs font-medium tracking-wide text-ink-100 transition-colors hover:border-ink-100 hover:bg-ink-100 hover:text-ink-950"
+      >
+        {headerActions.login.label}
+      </a>
+    </div>
+  </div>
+  <!-- progreso global del recorrido con los 4 checkpoints -->
+  <div class="absolute inset-x-0 bottom-0 h-px bg-ink-800">
+    <div class="h-full origin-left scale-x-0 bg-ink-300" data-scroll-progress></div>
+    {
+      nav.map((item, idx) => (
+        <span
+          class="checkpoint-pip"
+          data-checkpoint-pip={item.sectionIndex}
+          style={`left: ${(CHECKPOINTS[idx] ?? 0.2 + idx * 0.2) * 100}%;`}
+          aria-hidden="true"
+        />
+      ))
+    }
+  </div>
+</header>
+
+<style>
+  .site-header {
+    background: linear-gradient(to bottom, rgb(28 28 28 / 0.85), rgb(28 28 28 / 0));
+  }
+  .nav-link {
+    position: relative;
+  }
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -4px;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.5s var(--ease-out-expo);
+  }
+  .nav-link:hover::after,
+  .nav-link.is-active::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  .nav-link.is-active {
+    color: var(--color-ink-100);
+  }
+  .checkpoint-pip {
+    position: absolute;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    border-radius: 9999px;
+    transform: translate(-50%, -50%) scale(0.8);
+    background: var(--color-ink-600);
+    transition:
+      background-color 0.35s ease,
+      transform 0.35s var(--ease-out-expo);
+  }
+  .checkpoint-pip.is-passed {
+    background: var(--color-ink-300);
+  }
+  .checkpoint-pip.is-active {
+    background: var(--color-ink-100);
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+</style>

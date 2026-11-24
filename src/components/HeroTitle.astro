@@ -1,0 +1,126 @@
+---
+import { brand, hero, welcomeLanguages } from '../data/landing';
+
+const first = welcomeLanguages[0];
+---
+
+<div
+  class="hero pointer-events-none absolute inset-x-0 top-[12svh] z-40 flex flex-col items-center px-6 text-center"
+  data-hero
+>
+  <p class="hero-eyebrow mb-6 font-mono text-[11px] uppercase tracking-[0.28em] text-ink-400" data-hero-eyebrow>
+    {hero.eyebrow}
+  </p>
+
+  <h1 class="sr-only">{first.prefix}{brand.name}{first.suffix}</h1>
+
+  <div class="relative" aria-hidden="true">
+    <!-- rastro: copias fantasma de los saludos anteriores -->
+    <div class="pointer-events-none absolute inset-0" data-title-ghosts></div>
+
+    <p
+      class="hero-title relative text-balance font-medium leading-[1.02] tracking-[-0.035em] text-ink-100"
+      lang={first.code}
+      data-lang-title
+    >
+      <span data-t-prefix>{first.prefix}</span><span class="brand font-serif font-normal italic tracking-[-0.01em]" data-t-brand
+        >{brand.name}</span
+      ><span data-t-suffix>{first.suffix}</span>
+    </p>
+  </div>
+
+  <!-- camino de idiomas: cada idioma visitado queda marcado -->
+  <div class="mt-7 flex flex-col items-center gap-3" data-lang-meta>
+    <ol class="flex flex-wrap items-center justify-center gap-x-1 gap-y-2 font-mono text-[10px] tracking-[0.18em]" data-lang-path>
+      {
+        welcomeLanguages.map((l, i) => (
+          <li class="flex items-center gap-1">
+            {i > 0 && <span class="lang-link" data-lang-link />}
+            <span class={`lang-tag ${i === 0 ? 'is-active is-visited' : ''}`} data-lang-tag={l.code}>
+              {l.tag}
+            </span>
+          </li>
+        ))
+      }
+    </ol>
+    <div class="flex items-center gap-3 font-mono text-[11px] text-ink-400">
+      <span data-lang-native lang={first.code}>{first.native}</span>
+      <span class="relative block h-px w-16 overflow-hidden bg-ink-700">
+        <span class="lang-progress absolute inset-0 origin-left bg-ink-200" data-lang-progress></span>
+      </span>
+      <span data-lang-count>01 / {String(welcomeLanguages.length).padStart(2, '0')}</span>
+    </div>
+  </div>
+
+  <p class="mt-8 max-w-xl text-balance text-base text-ink-300 md:text-lg" data-hero-sub>
+    {hero.subtitle}
+  </p>
+</div>
+
+<!-- indicador de scroll -->
+<div class="pointer-events-none absolute bottom-6 left-1/2 z-40 -translate-x-1/2 text-center" data-scroll-cue>
+  <span class="font-mono text-[10px] uppercase tracking-[0.3em] text-ink-500">{hero.scrollCue}</span>
+  <span class="scroll-cue-line mx-auto mt-3 block h-10 w-px overflow-hidden bg-ink-700">
+    <span class="block h-1/2 w-full bg-ink-200"></span>
+  </span>
+</div>
+
+<script>
+  import { welcomeLanguages } from '../data/landing';
+  import { LanguageTitle } from '../scripts/text/LanguageTitle';
+
+  const root = document.querySelector<HTMLElement>('[data-hero]');
+  if (root) new LanguageTitle(root, welcomeLanguages).start();
+</script>
+
+<style>
+  .hero-title {
+    font-size: clamp(2.1rem, 5.6vw, 5.4rem);
+  }
+  .hero-title :global(.brand) {
+    position: relative;
+    display: inline-block;
+    padding-inline: 0.04em;
+  }
+  .lang-tag {
+    padding: 0.2rem 0.35rem;
+    border: 1px solid transparent;
+    color: var(--color-ink-600);
+    transition:
+      color 0.4s ease,
+      border-color 0.4s ease,
+      background-color 0.4s ease;
+  }
+  .lang-tag.is-visited {
+    color: var(--color-ink-300);
+  }
+  .lang-tag.is-active {
+    color: var(--color-ink-950);
+    background: var(--color-ink-100);
+  }
+  .lang-link {
+    display: inline-block;
+    width: 10px;
+    height: 1px;
+    background: var(--color-ink-700);
+  }
+  .lang-progress {
+    transform: scaleX(0);
+  }
+  .scroll-cue-line > span {
+    animation: cue 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  }
+  @keyframes cue {
+    0% {
+      transform: translateY(-100%);
+    }
+    100% {
+      transform: translateY(200%);
+    }
+  }
+  @media (max-width: 640px) {
+    .hero {
+      top: 11svh;
+    }
+  }
+</style>

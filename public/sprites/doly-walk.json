@@ -1,0 +1,60 @@
+{
+  "image": "/sprites/doly-walk.webp",
+  "frameW": 360,
+  "frameH": 260,
+  "cols": 6,
+  "rows": 5,
+  "designW": 360,
+  "designH": 260,
+  "groundY": 244,
+  "standingHeight": 233,
+  "strideUnits": 320,
+  "centerX": 185,
+  "walkScale": 0.9699570815450643,
+  "sitSeq": {
+    "image": "/sprites/doly-sit-ground.webp",
+    "frameW": 327,
+    "frameH": 256,
+    "cols": 4,
+    "rows": 3,
+    "count": 9,
+    "turnQuarterFrame": 11,
+    "turnHalfFrame": 9,
+    "turnCenterFrame": 10,
+    "groundY": 252,
+    "centerX": 156,
+    "headOffsetX": 56,
+    "bookSitScale": 0.8826,
+    "bookSitGroundOffsetY": -40,
+    "bookSitHeadOffsetX": 9
+  },
+  "bookSeq": {
+    "image": "/sprites/doly-book-seq.webp",
+    "frameW": 666,
+    "frameH": 277,
+    "cols": 6,
+    "rows": 11,
+    "groundY": 266,
+    "lieSpineX": 361,
+    "standSpineX": 211,
+    "lieStart": 0,
+    "lieCount": 30,
+    "standStart": 30,
+    "standCount": 30,
+    "standExitFrame": 26,
+    "emptyBookFrame": 60,
+    "entryDogOffsetX": -259,
+    "exitDogOffsetX": 256,
+    "exitFeetOffsetY": -20
+  },
+  "ranges": {
+    "walk": {
+      "start": 0,
+      "count": 30
+    },
+    "settle": {
+      "start": 0,
+      "count": 30
+    }
+  }
+}

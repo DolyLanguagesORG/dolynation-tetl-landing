@@ -1,0 +1,105 @@
+name: site-rc
+
+# El ciclo de release del SITIO, en su propio carril.
+#
+# Es la paridad del `rc-<app_version>` de la aplicacion, pero con su propia
+# candidata (`site-rc-<version>`) y su propio despliegue: publicar el sitio
+# NO reinicia ni la base, ni el backend, ni el frontend de la app.
+#
+# Un solo push a `site-rc-<version>` dispara, en paralelo:
+#
+#   release-guard-site  -> verifica que no haya otra rc del sitio
+#   build-images        -> construye la imagen (en este repo)
+#   deploy-site         -> despliega el compose del sitio en rehearsal
+#   deploy-site         -> y despues en staging (solo si rehearsal pasa su smoke)
+#   promote-site        -> abre el PR site-rc -> main (no lo mergea)
+#
+# El **smoke test del sitio** va dentro de `deploy-site.sh`: si el sitio no
+# cumple su contrato, el deploy falla, no se despliega en staging y no se
+# abre ningun PR. Es el mismo criterio que usa la app.
+#
+# Ver operations/FLUJO-DE-RELEASE.md.
+
+on:
+  push:
+    branches: ['site-rc-*']
+
+permissions:
+  contents: read
+  deployments: write
+  pull-requests: write
+  issues: read
+
+concurrency:
+  group: site-rc-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Verificar que no hay otra rc del sitio
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Guard
+        run: |
+          set -euo pipefail
+          bash scripts/release-guard-site.sh "${GITHUB_REF_NAME}"
+
+  rehearsal:
+    name: Desplegar el sitio en rehearsal
+    needs: guard
+    uses: ./.github/workflows/deploy-site.yml
+    with:
+      environment: rehearsal
+    secrets: inherit
+
+  staging:
+    name: Desplegar el sitio en staging
+    needs: [guard, rehearsal]
+    uses: ./.github/workflows/deploy-site.yml
+    with:
+      environment: staging
+    secrets: inherit
+
+  promote:
+    name: Abrir el PR de la candidata a main
+    needs: [guard, rehearsal, staging]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Crear el PR site-rc -> main
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          RC: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          existing="$(gh pr list --repo "${{ github.repository }}" \
+            --head "$RC" --base main --state open --json number --jq '.[0].number // empty')"
+
+          if [ -n "$existing" ]; then
+            echo "El PR #$existing ya existe: no se abre otro."
+            exit 0
+          fi
+
+          # El PR lo abre el bot con el PAT: `develop` pide 1 aprobacion y
+          # nadie puede aprobar sobre el propio PR. Quien lo mergea es una
+          # persona (2 aprobaciones + code owner en `main`).
+          gh pr create --repo "${{ github.repository }}" \
+            --base main --head "$RC" \
+            --title "chore(release): $RC" \
+            --body "Candidata del sitio: \`$RC\`.
+
+            Se desplego en rehearsal y en staging, y el smoke test del sitio
+            paso en los dos. Este PR **no** lo mergea el bot: hace falta una
+            persona (2 aprobaciones + code owner).
+
+            El despliegue a produccion es un acto aparte y manual
+            (\`deploy-site\` con \`environment: prod\`).
+
+            Refs #1" \
+            --label area:infra --label sprint-4
+
+          echo "PR abierto para $RC"

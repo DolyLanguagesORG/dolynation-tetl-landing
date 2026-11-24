@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   Tokens monocromáticos (Tailwind v4 · CSS-first)
+   ------------------------------------------------------------------ */
+@theme {
+  --color-ink-950: #121212;
+  --color-ink-900: #1c1c1c;
+  --color-ink-800: #262626;
+  --color-ink-700: #333333;
+  --color-ink-600: #4d4d4d;
+  --color-ink-500: #666666;
+  --color-ink-400: #8c8c8c;
+  --color-ink-300: #b3b3b3;
+  --color-ink-200: #e5e5e5;
+  --color-ink-100: #f5f5f5;
+  --color-paper: #f4f4f2;
+
+  --font-sans: "Inter Tight Variable", "Inter Tight", ui-sans-serif, system-ui, "Hiragino Sans", "Yu Gothic UI",
+    "Malgun Gothic", "Microsoft YaHei", sans-serif;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ------------------------------------------------------------------
+   Variables de layout del escenario (stage)
+   ------------------------------------------------------------------ */
+:root {
+  --bg: #1c1c1c;
+  /* posición vertical del camino dentro del stage sticky */
+  --ground-y: 81svh;
+  /* ancho del ancla libro + Doly (proporción del recorte 375x321) */
+  --anchor-w: min(clamp(220px, 32vw, 420px), 42svh);
+  --anchor-ratio: 0.856; /* 321 / 375 */
+  --anchor-ground: 0.816; /* 306 / 375 -> borde inferior del libro */
+  /* altura del recorrido scrollytelling */
+  --story-height: 420svh;
+  color-scheme: dark;
+}
+
+/* Tablet */
+@media (max-width: 1023px) and (min-width: 641px) {
+  :root {
+    --ground-y: 84svh;
+    --anchor-w: min(clamp(190px, 30vw, 310px), 34svh);
+  }
+}
+
+/* Pantallas bajas (móvil en horizontal, portátil pequeño): el camino sube y el
+   libro se reduce para no chocar con los bloques de texto. */
+@media (max-height: 640px) {
+  :root {
+    --ground-y: 78svh;
+    --anchor-w: min(clamp(150px, 26vw, 280px), 34svh);
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    /* el camino baja para que las tarjetas de la sección no tapen a Doly */
+    --ground-y: 88svh;
+    --anchor-w: min(39vw, 23svh);
+    /* en móvil el texto ocupa más alto: recorrido ágil y proporcionado */
+    --story-height: 400svh;
+  }
+}
+
+html {
+  scroll-behavior: auto; /* Lenis + ScrollTrigger controlan el scroll */
+  background: var(--bg);
+}
+
+body {
+  @apply bg-ink-900 text-ink-100 font-sans antialiased;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--color-paper);
+  color: var(--color-ink-950);
+}
+
+/* Lenis */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------
+   Utilidades de animación de texto
+   ------------------------------------------------------------------ */
+.word-mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+.word-mask > .word {
+  display: inline-block;
+  will-change: transform;
+}
+
+/* glifos en transición del título multilenguaje */
+.glyph-scramble {
+  color: var(--color-ink-500);
+  font-family: var(--font-mono);
+  font-weight: 400;
+}
+
+/* anotación de traducción sobre palabras clave */
+.xlate {
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+  line-height: 1.02;
+}
+.xlate::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.04em;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.35;
+}
+.xlate__note {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.06rem);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  color: var(--color-ink-400);
+  white-space: nowrap;
+}
+
+/* marquee de saludos */
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  animation: marquee 40s linear infinite;
+}
+
+/* barra de progreso del idioma activo */
+@keyframes lang-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ------------------------------------------------------------------
+   Movimiento reducido: composición estática
+   ------------------------------------------------------------------ */
+html.reduced-motion .marquee-track {
+  animation: none;
+}
