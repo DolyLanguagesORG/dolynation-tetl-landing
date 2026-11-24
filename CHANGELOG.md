@@ -16,6 +16,13 @@ mergearlo se crean el tag anotado y la GitHub Release. Ver
 > landing tiene la suya (`site_version`). Se pueden publicar por separado: un
 > retoque visual en la landing no obliga a subir la aplicación.
 
+## [0.3.1](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.3.0...v0.3.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **ci:** construye imagenes amd64 y arm64 en runners nativos sin QEMU ([#35](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/35)) ([8ad4cce](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/8ad4cce409edf23dda6637545704406bf58de434))
+
 ## [0.3.0](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.2.1...v0.3.0) (2026-11-24)
 
 
