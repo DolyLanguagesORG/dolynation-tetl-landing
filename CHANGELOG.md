@@ -16,6 +16,13 @@ mergearlo se crean el tag anotado y la GitHub Release. Ver
 > landing tiene la suya (`site_version`). Se pueden publicar por separado: un
 > retoque visual en la landing no obliga a subir la aplicación.
 
+## [0.4.0](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.3.2...v0.4.0) (2026-11-24)
+
+
+### Features
+
+* **landing:** agrega seo, favicons, open graph y assets de doly ([#34](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/issues/34)) ([ff02c9d](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/commit/ff02c9d17aae44c3fb70d91aaeeab51c94b44755))
+
 ## [0.3.2](https://github.com/DolyLanguagesORG/dolynation-tetl-landing/compare/v0.3.1...v0.3.2) (2026-11-24)
 
 
