@@ -6,7 +6,6 @@ import HeroTitle from '../components/HeroTitle.astro';
 import StoryChapters from '../components/StoryChapters.astro';
 import DolyStage from '../components/DolyStage.astro';
 import FinalCta from '../components/FinalCta.astro';
-import { STORY_HEIGHT_VH } from '../scripts/timeline/beats';
 ---
 
 <Layout>
@@ -18,14 +17,14 @@ import { STORY_HEIGHT_VH } from '../scripts/timeline/beats';
     <section
       id="story-track"
       class="relative w-full"
-      style={`height: ${STORY_HEIGHT_VH}svh;`}
+      style="height: var(--story-height);"
       aria-label="Recorrido interactivo DolyNation"
     >
       <!-- Marcadores semánticos de las 4 secciones del recorrido -->
-      <div id="problema" class="pointer-events-none absolute inset-x-0" style="top: 21%;"></div>
-      <div id="que-es" class="pointer-events-none absolute inset-x-0" style="top: 40%;"></div>
-      <div id="por-que" class="pointer-events-none absolute inset-x-0" style="top: 59%;"></div>
-      <div id="funcionalidades" class="pointer-events-none absolute inset-x-0" style="top: 78%;"></div>
+      <div id="problema" class="pointer-events-none absolute inset-x-0" style="top: 20%;"></div>
+      <div id="que-es" class="pointer-events-none absolute inset-x-0" style="top: 44%;"></div>
+      <div id="por-que" class="pointer-events-none absolute inset-x-0" style="top: 53%;"></div>
+      <div id="funcionalidades" class="pointer-events-none absolute inset-x-0" style="top: 80%;"></div>
 
       <div id="story-stage" class="sticky top-0 h-svh w-full overflow-hidden">
         <HeroTitle />
@@ -40,27 +39,41 @@ import { STORY_HEIGHT_VH } from '../scripts/timeline/beats';
 
 <script>
   import { SmoothScroll } from '../scripts/core/SmoothScroll';
-  import { SceneController } from '../scripts/scene/SceneController';
   import { MasterTimeline } from '../scripts/timeline/MasterTimeline';
+  import type { SceneController } from '../scripts/scene/SceneController';
 
   let smoothScroll: SmoothScroll | undefined;
   let sceneController: SceneController | undefined;
   let masterTimeline: MasterTimeline | undefined;
 
+  /**
+   * La escena 3D de fondo se carga aparte y más tarde: son ~450 KB de Three.js
+   * que no hacen falta para el primer pintado. El resto de la landing (texto,
+   * Doly, scroll) ya está en pie cuando llega.
+   */
+  function bootScene() {
+    const webglCanvas = document.querySelector<HTMLCanvasElement>('[data-webgl-canvas]');
+    if (!webglCanvas) return;
+
+    void import('../scripts/scene/SceneController').then(({ SceneController: Scene }) => {
+      if (!document.body.contains(webglCanvas)) return;
+      sceneController = new Scene(webglCanvas);
+      masterTimeline?.attachScene(sceneController);
+    });
+  }
+
   function boot() {
     smoothScroll = new SmoothScroll();
-
-    const webglCanvas = document.querySelector<HTMLCanvasElement>('[data-webgl-canvas]');
-    if (webglCanvas) {
-      sceneController = new SceneController(webglCanvas);
-    }
 
     const track = document.getElementById('story-track');
     const stage = document.getElementById('story-stage');
     if (track && stage) {
-      masterTimeline = new MasterTimeline(track, stage, sceneController);
+      masterTimeline = new MasterTimeline(track, stage, undefined, smoothScroll);
       masterTimeline.init();
     }
+
+    const idle = window.requestIdleCallback ?? ((cb: IdleRequestCallback) => window.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 8 }), 600));
+    idle(() => bootScene(), { timeout: 1200 });
   }
 
   boot();

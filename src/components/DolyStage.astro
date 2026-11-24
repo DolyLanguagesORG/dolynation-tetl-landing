@@ -100,4 +100,11 @@ for (let i = 0; i < 26; i++) {
     letter-spacing: 0.06em;
     color: var(--color-ink-400);
   }
+  /* En tablet y móvil las palabras del rastro se superponen entre sí:
+     se dejan solo las huellas. */
+  @media (max-width: 1023px) {
+    .trail-word {
+      display: none;
+    }
+  }
 </style>
