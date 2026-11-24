@@ -94,7 +94,7 @@ jobs:
           # sobrescribia la imagen del tag (mismo SHA) sin la version, y el
           # endpoint /version reportaba appVersion "".
           if [ -z "$VERSION" ]; then
-            MANIFEST="https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions.yml"
+            MANIFEST="https://raw.githubusercontent.com/DolyLanguagesORG/dolynation-tlalli-infra/develop/versions-site.yml"
             REPO_NAME="${REPOSITORY##*/}"
             VERSION="$(curl -fsSL "$MANIFEST" 2>/dev/null | awk -v repo="$REPO_NAME" '
               $1 == repo ":" { in_repo = 1; next }

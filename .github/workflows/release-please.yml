@@ -158,7 +158,7 @@ jobs:
           fi
 
           for i in $(seq 1 40); do
-            checks="$(gh pr checks "$number" --repo "${{ github.repository }}" --required --json name,state 2>/dev/null || echo '[]')"
+            checks="$(gh pr checks "$number" --repo "${{ github.repository }}" --json name,state 2>/dev/null || echo '[]')"
 
             total="$(printf '%s' "$checks" | jq 'length')"
             pendientes="$(printf '%s' "$checks" | jq '[.[] | select(.state != "SUCCESS" and .state != "SKIPPED")] | length')"
