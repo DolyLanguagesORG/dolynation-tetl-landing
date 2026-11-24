@@ -4,16 +4,36 @@ import '@fontsource-variable/jetbrains-mono';
 import '@fontsource/instrument-serif/400.css';
 import '@fontsource/instrument-serif/400-italic.css';
 import '../styles/global.css';
+import { brand, seo } from '../data/landing';
+import {
+  OG_IMAGE_DIMENSIONS,
+  OG_IMAGE_PATH,
+  OPEN_GRAPH_ALTERNATE_LOCALES,
+  OPEN_GRAPH_LOCALE,
+  SITE_NAME,
+  buildCanonicalUrl,
+  buildSiteStructuredData,
+} from '../lib/seo';
 
 interface Props {
   title?: string;
   description?: string;
+  canonicalPath?: string;
+  ogImagePath?: string;
+  ogImageAlt?: string;
 }
 
 const {
-  title = 'DolyNation · Tetl — Aprende idiomas paso a paso',
-  description = 'Aprende idiomas con DolyNation: historias, vocabulario en contexto y un camino que avanza contigo.',
+  title = seo.title,
+  description = seo.description,
+  canonicalPath = '/',
+  ogImagePath = OG_IMAGE_PATH,
+  ogImageAlt = seo.ogImageAlt,
 } = Astro.props;
+
+const canonicalUrl = buildCanonicalUrl(canonicalPath, Astro.site);
+const ogImageUrl = buildCanonicalUrl(ogImagePath, Astro.site);
+const structuredDataJson = JSON.stringify(buildSiteStructuredData(Astro.site)).replace(/</g, '\\u003c');
 ---
 
 <!doctype html>
@@ -21,18 +41,62 @@ const {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+
+    <!-- SEO básico e indexación -->
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#1c1c1c" />
+    <meta name="keywords" content={seo.keywords.join(', ')} />
+    <meta name="author" content={brand.name} />
+    <meta name="creator" content={brand.name} />
+    <meta name="publisher" content={brand.name} />
+    <meta name="application-name" content={SITE_NAME} />
+    <meta name="referrer" content="origin-when-cross-origin" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href={canonicalUrl} />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+
+    <!-- Tema y PWA -->
+    <meta name="theme-color" content={seo.themeColor} />
+    <meta name="color-scheme" content="dark" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content={SITE_NAME} />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Favicons e iconos de plataforma -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- Open Graph (WhatsApp, Telegram, Discord, Facebook, LinkedIn, iMessage) -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://dolynation.app/" />
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:url" content={canonicalUrl} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:image" content="/images/doly-book.webp" />
-    <link rel="canonical" href="https://dolynation.app/" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta property="og:locale" content={OPEN_GRAPH_LOCALE} />
+    {OPEN_GRAPH_ALTERNATE_LOCALES.map((altLocale) => <meta property="og:locale:alternate" content={altLocale} />)}
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:image:secure_url" content={ogImageUrl} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content={String(OG_IMAGE_DIMENSIONS.width)} />
+    <meta property="og:image:height" content={String(OG_IMAGE_DIMENSIONS.height)} />
+    <meta property="og:image:alt" content={ogImageAlt} />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
+
+    <!-- Datos estructurados Schema.org -->
+    <script is:inline type="application/ld+json" set:html={structuredDataJson} />
+
     <link rel="preload" href="/sprites/doly-walk.webp" as="image" type="image/webp" />
     <meta name="generator" content={Astro.generator} />
-    <title>{title}</title>
     <script is:inline src="/runtime-config.js"></script>
     <script is:inline>
       // Marca temprana para evitar parpadeos con movimiento reducido

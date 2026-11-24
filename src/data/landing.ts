@@ -20,6 +20,26 @@ export const brand = {
   product: 'Tetl · Dolynglish',
 };
 
+export const seo = {
+  title: 'DolyNation · Tetl — Lectura comprensiva de idiomas y retención por IA',
+  description:
+    'Aprende idiomas leyendo en contexto con DolyNation: historias vivas, vocabulario y gramática dentro del texto, y evaluación inteligente por IA.',
+  ogImageAlt: 'DolyNation · Tetl — Plataforma editorial para aprender idiomas leyendo en contexto con IA',
+  keywords: [
+    'DolyNation',
+    'Dolynglish',
+    'Tetl',
+    'aprender idiomas leyendo',
+    'lectura comprensiva IA',
+    'vocabulario contextual',
+    'gramática en contexto',
+    'evaluación CEFR',
+    'comprensión lectora',
+  ],
+  themeColor: '#1c1c1c',
+  backgroundColor: '#1c1c1c',
+};
+
 export const welcomeLanguages: WelcomeLanguage[] = [
   { code: 'es', tag: 'ES', native: 'Español', prefix: 'Bienvenido a ', suffix: '' },
   { code: 'en', tag: 'EN', native: 'English', prefix: 'Welcome to ', suffix: '' },
