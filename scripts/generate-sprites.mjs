@@ -15,7 +15,8 @@
  *   - assets-src/doly-book-seq-preview.png   (vista previa de verificación)
  */
 import sharp from 'sharp';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -1799,8 +1800,24 @@ const exitDogCenterCell = STAND_SPINE_X + (((exitMinX + exitMaxX) / 2) - standEx
 const exitDogOffsetX = Math.round(exitDogCenterCell - STAND_SPINE_X - (walkInkCenter - 185) * walkScale);
 const exitFeetOffsetY = Math.round((exitFeetMaxY - standExitMetrics.bookBottomY) * standExitScale) + bookCell.standYAdjust;
 
+async function hashSpriteFile(fileName) {
+  const buf = await readFile(path.join(OUT_SPRITES, fileName));
+  return createHash('sha256').update(buf).digest('hex').slice(0, 10);
+}
+
+const [walkHash, sitHash, bookHash] = await Promise.all([
+  hashSpriteFile('doly-walk.webp'),
+  hashSpriteFile('doly-sit-ground.webp'),
+  hashSpriteFile('doly-book-seq.webp'),
+]);
+const manifestVersion = createHash('sha256')
+  .update(`${walkHash}:${sitHash}:${bookHash}`)
+  .digest('hex')
+  .slice(0, 10);
+
 const manifest = {
-  image: '/sprites/doly-walk.webp',
+  version: manifestVersion,
+  image: `/sprites/doly-walk.webp?v=${walkHash}`,
   frameW: WALK_CROP.width,
   frameH: WALK_CROP.height,
   cols: WALK_COLS,
@@ -1812,9 +1829,12 @@ const manifest = {
   strideUnits: 320,
   centerX: 185,
   walkScale,
-  sitSeq,
+  sitSeq: {
+    ...sitSeq,
+    image: `/sprites/doly-sit-ground.webp?v=${sitHash}`,
+  },
   bookSeq: {
-    image: '/sprites/doly-book-seq.webp',
+    image: `/sprites/doly-book-seq.webp?v=${bookHash}`,
     frameW: bookCell.frameW,
     frameH: bookCell.frameH,
     cols: BOOK_COLS,
