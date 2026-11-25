@@ -311,3 +311,43 @@ test('el scroll manual normal mantiene paradas en los checkpoints y subida al li
     choreo.destroy();
   }
 });
+
+test('secuencia completa #problema -> #funcionalidades -> #problema -> #que-es -> #por-que -> #que-es -> #funcionalidades mantiene a Doly en el lado derecho', () => {
+  const { choreo, frames } = createChoreo(0.2);
+  const lieFlatFrame = manifest.bookSeq.lieStart + 29;
+  try {
+    choreo.navigateToSection(4);
+    stepFrames(320);
+    choreo.navigateToSection(1);
+    stepFrames(340);
+    choreo.navigateToSection(2);
+    stepFrames(280);
+    choreo.navigateToSection(3);
+    stepFrames(160);
+    choreo.navigateToSection(2);
+    stepFrames(180);
+
+    frames.length = 0;
+    choreo.navigateToSection(4);
+    stepFrames(320);
+
+    assert.ok(
+      !frames.some((f) => f.dog.bookA?.frame === lieFlatFrame),
+      'No debe acostarse en lie[29] al salir de #que-es hacia #funcionalidades',
+    );
+    const groundFrames = frames.filter((f) => f.dog.bookA === null && f.u > 0.66);
+    assert.ok(groundFrames.length > 5);
+    assert.ok(
+      groundFrames.every((f) => f.dogX > 700),
+      'Tras salir por la derecha del libro no debe heredar el ancla izquierda durante sitDown',
+    );
+
+    const last = frames[frames.length - 1];
+    assert.ok(Math.abs(last.u - 0.8) < 1e-4);
+    assert.equal(last.activeSection, 4);
+    assert.ok(last.dogX > 900);
+    assert.ok((last.dog.sitA?.x ?? 0) > 900);
+  } finally {
+    choreo.destroy();
+  }
+});

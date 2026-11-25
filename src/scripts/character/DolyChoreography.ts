@@ -454,6 +454,7 @@ export class DolyChoreography {
       const walkEndU = this.walkTargetUForSection(secIdx, 1);
       this.navGlide = null;
       this.turn = null;
+      this.sitHeadAnchorX = null;
       this.directNav = {
         phase: 'bookExitRight',
         targetSection: secIdx,
@@ -625,6 +626,7 @@ export class DolyChoreography {
       return;
     }
 
+    this.sitHeadAnchorX = null;
     this.directNav = {
       phase: 'walk',
       targetSection: opts.targetSection,
@@ -904,8 +906,11 @@ export class DolyChoreography {
           if (kind === 'sitGround') {
             this.sitHeadAnchorX = endHeadX;
             this.walkFrameCursor = 24;
-          } else if (kind === 'midWalk') {
-            this.walkFrameCursor = 24;
+          } else {
+            this.sitHeadAnchorX = null;
+            if (kind === 'midWalk') {
+              this.walkFrameCursor = 24;
+            }
           }
           this.turn = null;
         }
@@ -966,6 +971,9 @@ export class DolyChoreography {
       this.advanceWalkCursor(prevU, nextU);
       this.u = nextU;
       this.updateLatchedSection(this.u, prevU);
+      if (this.u < 0.14 || (this.u > 0.25 && this.u < 0.74) || this.u > 0.85) {
+        this.sitHeadAnchorX = null;
+      }
 
       if (this.navGlide.elapsed >= this.navGlide.duration) {
         this.u = this.navGlide.targetU;
@@ -1203,6 +1211,7 @@ export class DolyChoreography {
   }
 
   private enterPostWalkPhase(nav: DirectNavState) {
+    this.sitHeadAnchorX = null;
     if (nav.targetSection === 1 || nav.targetSection === 4) {
       nav.phase = 'sitDown';
       nav.phaseT = 0;
@@ -1480,7 +1489,9 @@ export class DolyChoreography {
   }
 
   private computeSitLayerX(baseStopX: number, facing: 1 | -1, sitT: number): number {
-    if (this.sitHeadAnchorX === null) return baseStopX;
+    if (this.sitHeadAnchorX === null || Math.abs(this.sitHeadAnchorX - baseStopX) > 160 * this.k) {
+      return baseStopX;
+    }
     const headAnchoredLayerX = this.sitHeadAnchorX - facing * this.manifest.sitSeq.headOffsetX * this.k;
     const tStand = clamp01(1 - (sitT - 0.09) / 0.91);
     return lerp(headAnchoredLayerX, baseStopX, easeInOut(tStand));
