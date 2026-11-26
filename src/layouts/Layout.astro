@@ -5,6 +5,12 @@ import '@fontsource/instrument-serif/400.css';
 import '@fontsource/instrument-serif/400-italic.css';
 import '../styles/global.css';
 import { brand, seo } from '../data/landing';
+import { resolveSpriteAssetUrl } from '../lib/spriteUrls';
+import spriteManifest from '../../public/sprites/doly-walk.json';
+
+const spritesVersion = spriteManifest.version ?? '';
+const walkPreloadHref = resolveSpriteAssetUrl(spriteManifest.image, spriteManifest.version);
+const sitPreloadHref = resolveSpriteAssetUrl(spriteManifest.sitSeq.image, spriteManifest.version);
 import {
   OG_IMAGE_DIMENSIONS,
   OG_IMAGE_PATH,
@@ -95,7 +101,9 @@ const structuredDataJson = JSON.stringify(buildSiteStructuredData(Astro.site)).r
     <!-- Datos estructurados Schema.org -->
     <script is:inline type="application/ld+json" set:html={structuredDataJson} />
 
-    <link rel="preload" href="/sprites/doly-walk.webp" as="image" type="image/webp" />
+    <link rel="preload" href={walkPreloadHref} as="image" type="image/webp" />
+    <link rel="preload" href={sitPreloadHref} as="image" type="image/webp" />
+    {spritesVersion && <meta name="doly-sprites-version" content={spritesVersion} />}
     <meta name="generator" content={Astro.generator} />
     <script is:inline src="/runtime-config.js"></script>
     <script is:inline>

@@ -1,5 +1,6 @@
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { buildSpriteManifestUrl } from '../../lib/spriteUrls';
 import { loadSpriteSheet } from '../character/CharacterAnimator';
 import { DolyWalkRenderer } from '../character/DolyWalkRenderer';
 import { DolyChoreography, type StageMetrics } from '../character/DolyChoreography';
@@ -94,7 +95,9 @@ export class MasterTimeline {
       }
     };
 
-    const sheet = await loadSpriteSheet('/sprites/doly-walk.json');
+    const spritesVersion =
+      document.querySelector<HTMLMetaElement>('meta[name="doly-sprites-version"]')?.content ?? undefined;
+    const sheet = await loadSpriteSheet(buildSpriteManifestUrl('/sprites/doly-walk.json', spritesVersion));
     this.renderer = new DolyWalkRenderer(canvas, sheet.walkImage, sheet.sitImage, sheet.bookImage, sheet.manifest);
     void sheet.loadBook().then((img) => this.renderer?.setBookImage(img));
 

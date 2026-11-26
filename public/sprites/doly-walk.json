@@ -1,5 +1,6 @@
 {
-  "image": "/sprites/doly-walk.webp",
+  "version": "e4e9392d6a",
+  "image": "/sprites/doly-walk.webp?v=30dded8f1b",
   "frameW": 360,
   "frameH": 260,
   "cols": 6,
@@ -12,7 +13,7 @@
   "centerX": 185,
   "walkScale": 0.9699570815450643,
   "sitSeq": {
-    "image": "/sprites/doly-sit-ground.webp",
+    "image": "/sprites/doly-sit-ground.webp?v=59c022cafa",
     "frameW": 327,
     "frameH": 256,
     "cols": 4,
@@ -29,7 +30,7 @@
     "bookSitHeadOffsetX": 9
   },
   "bookSeq": {
-    "image": "/sprites/doly-book-seq.webp",
+    "image": "/sprites/doly-book-seq.webp?v=7cf1a92b39",
     "frameW": 666,
     "frameH": 277,
     "cols": 6,

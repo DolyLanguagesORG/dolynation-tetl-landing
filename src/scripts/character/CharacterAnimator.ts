@@ -6,6 +6,8 @@
  */
 
 /** Capa de la hoja de caminata (perrita de perfil sobre el suelo). */
+import { resolveSpriteAssetUrl } from '../../lib/spriteUrls';
+
 export interface WalkLayer {
   /** centro del cuerpo de Doly en px (coordenadas del stage) */
   x: number;
@@ -117,6 +119,7 @@ export interface BookSequenceManifest {
 }
 
 export interface SpriteManifest {
+  version?: string;
   image: string;
   frameW: number;
   frameH: number;
@@ -162,11 +165,18 @@ export interface SpriteSheet {
  * e inicia de inmediato la precarga en segundo plano de la hoja del libro.
  */
 export async function loadSpriteSheet(manifestUrl: string): Promise<SpriteSheet> {
-  const manifest = (await fetch(manifestUrl).then((r) => r.json())) as SpriteManifest;
-  const [walkImage, sitImage] = await Promise.all([loadImg(manifest.image), loadImg(manifest.sitSeq.image)]);
+  const response = await fetch(manifestUrl, { cache: 'no-cache' });
+  if (!response.ok) {
+    throw new Error(`No se pudo cargar el manifiesto de sprites (${response.status})`);
+  }
+  const manifest = (await response.json()) as SpriteManifest;
+  const walkUrl = resolveSpriteAssetUrl(manifest.image, manifest.version);
+  const sitUrl = resolveSpriteAssetUrl(manifest.sitSeq.image, manifest.version);
+  const bookUrl = resolveSpriteAssetUrl(manifest.bookSeq.image, manifest.version);
+  const [walkImage, sitImage] = await Promise.all([loadImg(walkUrl), loadImg(sitUrl)]);
 
   let bookImage: HTMLImageElement | null = null;
-  const bookPromise = loadImg(manifest.bookSeq.image).then((img) => {
+  const bookPromise = loadImg(bookUrl).then((img) => {
     bookImage = img;
     return img;
   });

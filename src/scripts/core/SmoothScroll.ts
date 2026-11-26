@@ -127,7 +127,7 @@ export class SmoothScroll {
             const targetY = this.stopScrollY(secIdx);
             if (targetY !== null) {
               this.driver?.snapToProgress(SECTION_STOPS[secIdx]);
-              this.lenis.scrollTo(targetY, { duration: 1.4 });
+              this.lenis.scrollTo(targetY, this.reducedMotion ? { immediate: true } : { duration: 1.4 });
             }
             return;
           }
@@ -152,7 +152,7 @@ export class SmoothScroll {
         if (this.driver && bounds && target.offsetTop >= bounds.bottom - 2) {
           this.driver.seekFromExternalScroll(1);
         }
-        this.lenis.scrollTo(target, { duration: 1.6 });
+        this.lenis.scrollTo(target, this.reducedMotion ? { immediate: true } : { duration: 1.6 });
       });
     });
 

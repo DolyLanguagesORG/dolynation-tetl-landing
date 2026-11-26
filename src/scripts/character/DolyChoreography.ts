@@ -45,6 +45,36 @@ interface NavGlideState {
   duration: number;
 }
 
+type DirectNavPhase = 'standUp' | 'bookExitRight' | 'walk' | 'sitDown';
+
+interface DirectNavState {
+  phase: DirectNavPhase;
+  targetSection: number;
+  targetU: number;
+  targetX: number;
+  dir: 1 | -1;
+  currentX: number;
+  walkStartX: number;
+  walkEndX: number;
+  walkStartU: number;
+  walkEndU: number;
+  phaseStartU: number;
+  sitFromU: number;
+  standStartSitT: number;
+  startYOffset: number;
+  phaseT: number;
+  phaseDur: number;
+  yOffset: number;
+  stepFrames?: number[];
+  climbFrameCount?: number;
+  bookStartX?: number;
+  resumeBookTargetSection?: number;
+}
+
+interface GroundOverrideState {
+  x: number;
+}
+
 const WALK_STRIDE = 450;
 
 /** Velocidades directas de scroll manual en unidades de `u` por segundo (sin cola acumulada) */
@@ -57,6 +87,14 @@ const CHECKPOINT_LOCK_DUR = 0.55;
 /** Duración del giro opaco con cabeza fija (s) */
 const TURN_DUR = 0.3;
 const BOOK_LIE_TURN_DUR = 0.4;
+
+/** Tiempos y velocidad de recorrido directo al cruzar por accesos rápidos */
+const GROUND_STAND_UP_DUR = 0.28;
+const GROUND_SIT_DOWN_DUR = 0.32;
+const BOOK_EXIT_RIGHT_DUR = 0.52;
+const DIRECT_WALK_DESIGN_SPEED = 520;
+const DIRECT_WALK_MIN_DUR = 0.55;
+const DIRECT_WALK_MAX_DUR = 2.6;
 
 /**
  * Motor unificado de coreografía dirigido directamente por el usuario:
@@ -101,6 +139,12 @@ export class DolyChoreography {
   /** Viaje continuo al pulsar enlaces del menú superior */
   private navGlide: NavGlideState | null = null;
 
+  /** Ruta directa caminando por el suelo cuando un acceso rápido cruza el libro */
+  private directNav: DirectNavState | null = null;
+
+  /** Mantiene a Doly en el suelo si el usuario interrumpe con scroll una ruta directa */
+  private groundOverride: GroundOverrideState | null = null;
+
   private lastTickTime = 0;
   private disposed = false;
   private frozen = false;
@@ -131,19 +175,51 @@ export class DolyChoreography {
     const oldCx = this.cx;
     const oldK = this.k || 1;
     const scaleRatio = m.k / oldK;
+    const mapX = (x: number) => m.width / 2 + (x - oldCx) * scaleRatio;
 
     if (this.turn) {
-      this.turn.startHeadX = m.width / 2 + (this.turn.startHeadX - oldCx) * scaleRatio;
-      this.turn.endHeadX = m.width / 2 + (this.turn.endHeadX - oldCx) * scaleRatio;
+      this.turn.startHeadX = mapX(this.turn.startHeadX);
+      this.turn.endHeadX = mapX(this.turn.endHeadX);
       if (this.turn.yOffset !== 0) {
         this.turn.yOffset *= scaleRatio;
       }
     }
     if (this.sitHeadAnchorX !== null) {
-      this.sitHeadAnchorX = m.width / 2 + (this.sitHeadAnchorX - oldCx) * scaleRatio;
+      this.sitHeadAnchorX = mapX(this.sitHeadAnchorX);
+    }
+    if (this.groundOverride) {
+      this.groundOverride.x = mapX(this.groundOverride.x);
     }
 
     this.metrics = m;
+
+    if (this.directNav) {
+      if (this.directNav.phase === 'standUp' || this.directNav.phase === 'sitDown') {
+        const stopX = this.u <= 0.5 ? this.leftStopX : this.rightStopX;
+        this.directNav.currentX = stopX;
+        this.directNav.walkStartX = stopX;
+      } else {
+        this.directNav.currentX = mapX(this.directNav.currentX);
+        this.directNav.walkStartX =
+          this.directNav.phase === 'bookExitRight' ? this.walkBookRightStart : mapX(this.directNav.walkStartX);
+      }
+      if (this.directNav.resumeBookTargetSection !== undefined) {
+        this.directNav.walkEndX = this.directNav.walkEndU <= 0.34 ? this.entryX : this.mirroredEntryX;
+        this.directNav.targetX = this.cx;
+      } else {
+        const mappedDest = this.stopXForSection(this.directNav.targetSection);
+        this.directNav.walkEndX = mappedDest;
+        this.directNav.targetX = mappedDest;
+      }
+      if (this.directNav.bookStartX !== undefined) {
+        this.directNav.bookStartX = mapX(this.directNav.bookStartX);
+      }
+      if (this.directNav.startYOffset !== 0) {
+        this.directNav.startYOffset *= scaleRatio;
+        this.directNav.yOffset *= scaleRatio;
+      }
+    }
+
     this.emit();
   }
 
@@ -176,6 +252,8 @@ export class DolyChoreography {
     this.sitHeadAnchorX = null;
     this.turn = null;
     this.navGlide = null;
+    this.directNav = null;
+    this.groundOverride = null;
     this.velocity = 0;
     this.targetVel = 0;
     this.driveHoldTimer = 0;
@@ -199,6 +277,7 @@ export class DolyChoreography {
 
     // Cualquier scroll manual cancela al instante un viaje automático de navegación
     this.navGlide = null;
+    this.interruptDirectNav();
 
     const now = performance.now();
     const absDy = Math.abs(deltaY);
@@ -245,6 +324,11 @@ export class DolyChoreography {
     const target = SECTION_STOPS[secIdx];
     if (target === undefined) return;
 
+    if (this.frozen) {
+      this.snapToProgress(target);
+      return;
+    }
+
     this.checkpointLockTimer = 0;
     this.awaitingFreshGesture = false;
     this.lockedAtCp = null;
@@ -252,14 +336,203 @@ export class DolyChoreography {
     this.velocity = 0;
     this.targetVel = 0;
 
+    // Si está bajando por la derecha del libro y pulsan otra estación de suelo, actualiza destino sin cortar la bajada
+    if (this.directNav?.phase === 'bookExitRight' && secIdx !== 2 && secIdx !== 3) {
+      const destX = this.stopXForSection(secIdx);
+      const walkDir: 1 | -1 = destX >= this.walkBookRightStart ? 1 : -1;
+      this.directNav.targetSection = secIdx;
+      this.directNav.targetU = target;
+      this.directNav.targetX = destX;
+      this.directNav.walkEndX = destX;
+      this.directNav.walkEndU = this.walkTargetUForSection(secIdx, walkDir);
+      this.directNav.dir = walkDir;
+      this.directNav.resumeBookTargetSection = undefined;
+      return;
+    }
+
+    const activeX = this.activeGroundX();
+    if (activeX !== null) {
+      if (this.directNav?.phase === 'sitDown' && this.directNav.targetSection === secIdx) {
+        return;
+      }
+      this.turn = null;
+      this.navGlide = null;
+      const isBookTarget = secIdx === 2 || secIdx === 3;
+      const isSeated =
+        this.directNav?.phase === 'sitDown' || this.directNav?.phase === 'standUp';
+      const currentSitT = this.currentDirectSitT();
+      const seatedWalkStartU = (dir: 1 | -1) =>
+        isSeated ? (this.u <= 0.5 ? (dir === 1 ? 0.25 : 0.14) : dir === 1 ? 0.85 : 0.74) : this.u;
+
+      if (isBookTarget) {
+        const enterFromLeft = secIdx === 2 ? activeX <= this.cx + 24 * this.k : activeX <= this.cx;
+        const entryDestX = enterFromLeft ? this.entryX : this.mirroredEntryX;
+        const entryU = enterFromLeft ? 0.33 : 0.67;
+        const dir: 1 | -1 = entryDestX >= activeX ? 1 : -1;
+        this.groundOverride = null;
+
+        if (!isSeated && Math.abs(activeX - entryDestX) <= 3) {
+          this.directNav = null;
+          this.u = entryU;
+          this.facing = enterFromLeft ? 1 : -1;
+          this.bookFacing = this.facing;
+          this.startStandardGlide(target);
+          return;
+        }
+
+        this.startGroundDirectNav({
+          fromX: activeX,
+          fromU: this.u,
+          walkStartU: seatedWalkStartU(dir),
+          walkEndX: entryDestX,
+          walkEndU: entryU,
+          targetSection: secIdx,
+          targetU: target,
+          targetX: this.cx,
+          dir,
+          needsStandUp: isSeated,
+          standStartSitT: currentSitT,
+          resumeBookTargetSection: secIdx,
+        });
+        return;
+      }
+
+      const destX = this.stopXForSection(secIdx);
+      if (!isSeated && Math.abs(destX - activeX) <= 2 && Math.abs(target - this.u) <= 0.002) {
+        this.directNav = null;
+        this.groundOverride = null;
+        this.u = target;
+        this.latchedSection = secIdx;
+        this.emit();
+        return;
+      }
+
+      const dir: 1 | -1 = destX >= activeX ? 1 : -1;
+      const walkEndU = this.walkTargetUForSection(secIdx, dir);
+      this.groundOverride = null;
+      this.startGroundDirectNav({
+        fromX: activeX,
+        fromU: this.u,
+        walkStartU: seatedWalkStartU(dir),
+        walkEndX: destX,
+        walkEndU,
+        targetSection: secIdx,
+        targetU: target,
+        targetX: destX,
+        dir,
+        needsStandUp: isSeated,
+        standStartSitT: currentSitT,
+      });
+      return;
+    }
+
     const dist = Math.abs(target - this.u);
     if (dist <= 0.002) {
       this.u = target;
       this.latchedSection = secIdx;
+      this.navGlide = null;
+      this.directNav = null;
       this.emit();
       return;
     }
 
+    const startU = this.u;
+    const isBookTarget = secIdx === 2 || secIdx === 3;
+    const crossesBook =
+      !isBookTarget &&
+      ((startU <= 0.335 && target >= 0.8) || (startU >= 0.665 && target <= 0.2));
+    const leavesBookRight =
+      !isBookTarget &&
+      startU > 0.335 &&
+      startU < 0.665 &&
+      target >= 0.8 &&
+      (startU >= 0.432 || this.bookFacing === 1);
+
+    if (leavesBookRight) {
+      const destX = this.stopXForSection(secIdx);
+      const { frames, climbFrameCount, bookStartX } = this.buildBookExitFrames(startU);
+      const walkEndU = this.walkTargetUForSection(secIdx, 1);
+      this.navGlide = null;
+      this.turn = null;
+      this.sitHeadAnchorX = null;
+      this.directNav = {
+        phase: 'bookExitRight',
+        targetSection: secIdx,
+        targetU: target,
+        targetX: destX,
+        dir: 1,
+        currentX: bookStartX,
+        walkStartX: this.walkBookRightStart,
+        walkEndX: destX,
+        walkStartU: 0.67,
+        walkEndU,
+        phaseStartU: startU,
+        sitFromU: walkEndU,
+        standStartSitT: 0,
+        startYOffset: 0,
+        phaseT: 0,
+        phaseDur: BOOK_EXIT_RIGHT_DUR,
+        yOffset: 0,
+        stepFrames: frames,
+        climbFrameCount,
+        bookStartX,
+      };
+      return;
+    }
+
+    if (crossesBook) {
+      const dir: 1 | -1 = target > startU ? 1 : -1;
+      const startX = this.computeXForU(startU, this.facing, this.bookFacing);
+      const destX = this.stopXForSection(secIdx);
+      const walkEndU = this.walkTargetUForSection(secIdx, dir);
+      const inLeftSit = startU >= 0.14 && startU <= 0.25;
+      const inRightSit = startU >= 0.74 && startU <= 0.85;
+      const isSeated = inLeftSit || inRightSit;
+      const standStartSitT = inLeftSit
+        ? startU <= 0.2
+          ? (startU - 0.14) / 0.06
+          : (0.25 - startU) / 0.05
+        : inRightSit
+          ? startU <= 0.8
+            ? (startU - 0.74) / 0.06
+            : (0.85 - startU) / 0.05
+          : 0;
+      const fromX = inLeftSit ? this.leftStopX : inRightSit ? this.rightStopX : startX;
+      const standWalkStartU = inLeftSit
+        ? dir === 1
+          ? 0.25
+          : 0.14
+        : inRightSit
+          ? dir === 1
+            ? 0.85
+            : 0.74
+          : startU;
+
+      this.navGlide = null;
+      this.turn = null;
+      this.startGroundDirectNav({
+        fromX,
+        fromU: startU,
+        walkStartU: standWalkStartU,
+        walkEndX: destX,
+        walkEndU,
+        targetSection: secIdx,
+        targetU: target,
+        targetX: destX,
+        dir,
+        needsStandUp: isSeated,
+        standStartSitT,
+      });
+      return;
+    }
+
+    this.directNav = null;
+    this.groundOverride = null;
+    this.startStandardGlide(target);
+  }
+
+  private startStandardGlide(target: number) {
+    const dist = Math.abs(target - this.u);
     const duration = Math.min(3.6, Math.max(0.75, 0.55 + dist * 3.4));
     this.navGlide = {
       startU: this.u,
@@ -269,12 +542,181 @@ export class DolyChoreography {
     };
   }
 
+  private stopXForSection(secIdx: number): number {
+    switch (secIdx) {
+      case 0:
+        return this.offL;
+      case 1:
+        return this.leftStopX;
+      case 4:
+        return this.rightStopX;
+      case 5:
+        return this.offR;
+      default:
+        return this.cx;
+    }
+  }
+
+  private walkTargetUForSection(secIdx: number, dir: 1 | -1): number {
+    if (secIdx === 1) return dir === 1 ? 0.14 : 0.25;
+    if (secIdx === 4) return dir === 1 ? 0.74 : 0.85;
+    return SECTION_STOPS[secIdx] ?? 0;
+  }
+
+  private walkDurationForDistance(dxPx: number): number {
+    const designDist = Math.abs(dxPx) / Math.max(0.05, this.k);
+    if (designDist <= 4) return 0.04;
+    return Math.min(
+      DIRECT_WALK_MAX_DUR,
+      Math.max(DIRECT_WALK_MIN_DUR, 0.25 + designDist / DIRECT_WALK_DESIGN_SPEED),
+    );
+  }
+
+  private activeGroundX(): number | null {
+    if (this.groundOverride !== null) return this.groundOverride.x;
+    if (!this.directNav || this.directNav.phase === 'bookExitRight') return null;
+    return this.directNav.currentX;
+  }
+
+  private currentDirectSitT(): number {
+    if (!this.directNav) return 0;
+    if (this.directNav.phase === 'sitDown') return clamp01(this.directNav.phaseT);
+    if (this.directNav.phase === 'standUp') {
+      return clamp01(lerp(this.directNav.standStartSitT, 0, this.directNav.phaseT));
+    }
+    return 0;
+  }
+
+  private startGroundDirectNav(opts: {
+    fromX: number;
+    fromU: number;
+    walkStartU: number;
+    walkEndX: number;
+    walkEndU: number;
+    targetSection: number;
+    targetU: number;
+    targetX: number;
+    dir: 1 | -1;
+    needsStandUp: boolean;
+    standStartSitT: number;
+    resumeBookTargetSection?: number;
+  }) {
+    const yOff = this.directNav?.phase === 'walk' ? this.directNav.yOffset : 0;
+    if (opts.needsStandUp && opts.standStartSitT > 0.05) {
+      this.directNav = {
+        phase: 'standUp',
+        targetSection: opts.targetSection,
+        targetU: opts.targetU,
+        targetX: opts.targetX,
+        dir: opts.dir,
+        currentX: opts.fromX,
+        walkStartX: opts.fromX,
+        walkEndX: opts.walkEndX,
+        walkStartU: opts.walkStartU,
+        walkEndU: opts.walkEndU,
+        phaseStartU: opts.fromU,
+        sitFromU: opts.walkEndU,
+        standStartSitT: opts.standStartSitT,
+        startYOffset: 0,
+        phaseT: 0,
+        phaseDur: Math.max(0.12, GROUND_STAND_UP_DUR * opts.standStartSitT),
+        yOffset: 0,
+        resumeBookTargetSection: opts.resumeBookTargetSection,
+      };
+      return;
+    }
+
+    this.sitHeadAnchorX = null;
+    this.directNav = {
+      phase: 'walk',
+      targetSection: opts.targetSection,
+      targetU: opts.targetU,
+      targetX: opts.targetX,
+      dir: opts.dir,
+      currentX: opts.fromX,
+      walkStartX: opts.fromX,
+      walkEndX: opts.walkEndX,
+      walkStartU: opts.fromU,
+      walkEndU: opts.walkEndU,
+      phaseStartU: opts.fromU,
+      sitFromU: opts.walkEndU,
+      standStartSitT: 0,
+      startYOffset: yOff,
+      phaseT: 0,
+      phaseDur: this.walkDurationForDistance(opts.walkEndX - opts.fromX),
+      yOffset: yOff,
+      resumeBookTargetSection: opts.resumeBookTargetSection,
+    };
+  }
+
+  private buildBookExitFrames(startU: number): {
+    frames: number[];
+    climbFrameCount: number;
+    bookStartX: number;
+  } {
+    const exitStandFrames: number[] = [];
+    for (let s = 11; s <= this.manifest.bookSeq.standExitFrame; s++) {
+      exitStandFrames.push(this.bookFrame('stand', s));
+    }
+
+    if (startU < 0.432) {
+      const clipT = clamp01((startU - 0.33) / 0.11);
+      const climbT = clamp01((clipT - 0.03) / 0.97);
+      const curLie = Math.min(20, Math.max(0, Math.round(lerp(0, 20, climbT))));
+      const climbFrames: number[] = [];
+      for (let f = curLie; f <= 20; f++) {
+        climbFrames.push(this.bookFrame('lie', f));
+      }
+      return {
+        frames: [...climbFrames, ...exitStandFrames],
+        climbFrameCount: climbFrames.length,
+        bookStartX: lerp(this.entryX, this.cx, clipT),
+      };
+    }
+
+    if (startU <= 0.475) {
+      return { frames: exitStandFrames, climbFrameCount: 0, bookStartX: this.cx };
+    }
+
+    const stepT = clamp01((startU - 0.53) / 0.14);
+    const startIdx =
+      startU <= 0.53
+        ? 0
+        : Math.min(
+            this.stepOffRightFrames.length - 2,
+            Math.floor(stepT * (this.stepOffRightFrames.length - 1)),
+          );
+    return {
+      frames: this.stepOffRightFrames.slice(startIdx),
+      climbFrameCount: 0,
+      bookStartX: lerp(this.cx, this.walkBookRightStart, stepT),
+    };
+  }
+
+  private interruptDirectNav() {
+    if (!this.directNav) return;
+    const nav = this.directNav;
+    this.directNav = null;
+    if (nav.phase === 'walk') {
+      const timelineX = this.computeXForU(this.u, this.facing, this.bookFacing);
+      const onBookZone = this.u > 0.25 && this.u < 0.74;
+      const inSitZone = (this.u > 0.14 && this.u < 0.25) || (this.u > 0.74 && this.u < 0.85);
+      if (onBookZone || inSitZone || Math.abs(nav.currentX - timelineX) > 2) {
+        this.groundOverride = { x: nav.currentX };
+      }
+    } else if (nav.phase === 'bookExitRight' && nav.phaseT >= 0.85) {
+      this.groundOverride = { x: nav.currentX };
+    }
+  }
+
   /** Sincronización directa solo si el usuario arrastra manualmente la barra de scroll nativa */
   seekFromExternalScroll(p: number) {
     if (this.frozen) return;
     const clamped = clamp01(p);
     const prev = this.u;
     this.navGlide = null;
+    this.directNav = null;
+    this.groundOverride = null;
     this.turn = null;
     this.velocity = 0;
     this.targetVel = 0;
@@ -417,7 +859,14 @@ export class DolyChoreography {
     this.lastTickTime = now;
 
     // El libro aparece en cuanto Doly inicia su camino y se mantiene fijo a escala 1
-    const targetBookAlpha = this.u > 0.002 || this.navGlide !== null || this.turn !== null ? 1 : 0;
+    const targetBookAlpha =
+      this.u > 0.002 ||
+      this.navGlide !== null ||
+      this.directNav !== null ||
+      this.groundOverride !== null ||
+      this.turn !== null
+        ? 1
+        : 0;
     let bookAlphaChanged = false;
     if (Math.abs(targetBookAlpha - this.bookAlpha) > 0.002) {
       const stepA = dt / 0.35;
@@ -457,13 +906,21 @@ export class DolyChoreography {
           if (kind === 'sitGround') {
             this.sitHeadAnchorX = endHeadX;
             this.walkFrameCursor = 24;
-          } else if (kind === 'midWalk') {
-            this.walkFrameCursor = 24;
+          } else {
+            this.sitHeadAnchorX = null;
+            if (kind === 'midWalk') {
+              this.walkFrameCursor = 24;
+            }
           }
           this.turn = null;
         }
       }
       return true;
+    }
+
+    // 1.5 Recorrido directo por accesos rápidos (cruzando por el suelo sin subirse al libro)
+    if (this.directNav) {
+      return this.stepDirectNav(dt, prevU);
     }
 
     // 2. Viaje continuo al hacer clic en menú superior (A2: directo sin bloqueos intermedios)
@@ -514,6 +971,9 @@ export class DolyChoreography {
       this.advanceWalkCursor(prevU, nextU);
       this.u = nextU;
       this.updateLatchedSection(this.u, prevU);
+      if (this.u < 0.14 || (this.u > 0.25 && this.u < 0.74) || this.u > 0.85) {
+        this.sitHeadAnchorX = null;
+      }
 
       if (this.navGlide.elapsed >= this.navGlide.duration) {
         this.u = this.navGlide.targetU;
@@ -548,6 +1008,7 @@ export class DolyChoreography {
 
       // Comprobación de cruce por cualquiera de los 4 checkpoints
       for (const cp of CHECKPOINTS) {
+        if (this.groundOverride !== null) break;
         if (cp === this.lockedAtCp) continue;
         if ((prevU < cp && nextU >= cp) || (prevU > cp && nextU <= cp)) {
           nextU = cp;
@@ -563,7 +1024,7 @@ export class DolyChoreography {
       }
 
       // Freno limpio si cruza 0.44 / 0.53 sin lock previo y necesita girar sobre el libro
-      if (this.checkpointLockTimer <= 0) {
+      if (this.checkpointLockTimer <= 0 && this.groundOverride === null) {
         if (dir === -1 && this.bookFacing === 1 && prevU >= 0.44 && nextU < 0.44) {
           this.u = 0.44;
           this.updateLatchedSection(this.u, prevU);
@@ -582,24 +1043,261 @@ export class DolyChoreography {
         this.lockedAtCp = null;
       }
 
-      this.advanceWalkCursor(prevU, nextU);
+      if (this.groundOverride !== null) {
+        this.stepGroundOverrideWalk(prevU, nextU);
+      } else {
+        this.advanceWalkCursor(prevU, nextU);
+      }
       this.u = nextU;
       this.updateLatchedSection(this.u, prevU);
       movedU = nextU !== prevU;
 
       // Limpia el ancla de cabeza al terminar la transición de sentado/levantado en suelo
-      if (this.u < 0.14 || (this.u > 0.25 && this.u < 0.74) || this.u > 0.85) {
-        this.sitHeadAnchorX = null;
-      }
-      if (Math.abs(this.u - 0.33) <= 0.006 || Math.abs(this.u - 0.67) <= 0.006) {
-        this.walkFrameCursor = 12;
+      if (this.groundOverride === null) {
+        if (this.u < 0.14 || (this.u > 0.25 && this.u < 0.74) || this.u > 0.85) {
+          this.sitHeadAnchorX = null;
+        }
+        if (Math.abs(this.u - 0.33) <= 0.006 || Math.abs(this.u - 0.67) <= 0.006) {
+          this.walkFrameCursor = 12;
+        }
       }
     }
 
     return movedU;
   }
 
+  private stepDirectNav(dt: number, prevU: number): boolean {
+    const nav = this.directNav!;
+
+    if (nav.phase === 'standUp') {
+      if (nav.phaseT <= 0.05 && this.maybeStartTurn(nav.dir)) return true;
+
+      nav.phaseT = Math.min(1, nav.phaseT + dt / nav.phaseDur);
+      this.u = clamp01(lerp(nav.phaseStartU, nav.walkStartU, easeInOut(nav.phaseT)));
+      this.updateLatchedSection(this.u, prevU);
+
+      if (nav.phaseT >= 1) {
+        this.sitHeadAnchorX = null;
+        this.walkFrameCursor = 24;
+        if (this.u <= 0.33 || this.u >= 0.67) {
+          this.bookFacing = this.facing;
+        }
+        nav.phase = 'walk';
+        nav.phaseT = 0;
+        nav.phaseDur = this.walkDurationForDistance(nav.walkEndX - nav.walkStartX);
+        nav.startYOffset = 0;
+        nav.yOffset = 0;
+      }
+      return true;
+    }
+
+    if (nav.phase === 'bookExitRight') {
+      if (this.bookFacing !== 1 && this.maybeStartBookRightTurn()) return true;
+
+      nav.phaseT = Math.min(1, nav.phaseT + dt / nav.phaseDur);
+      const exitEase = easeInOut(nav.phaseT);
+      this.u = clamp01(lerp(nav.phaseStartU, nav.walkStartU, exitEase));
+      this.updateLatchedSection(this.u, prevU);
+
+      const frames = nav.stepFrames ?? this.stepOffRightFrames;
+      const climbCount = nav.climbFrameCount ?? 0;
+      const stepT = clamp01(nav.phaseT / 0.96);
+      if (climbCount > 0 && frames.length > climbCount) {
+        const climbPortion = climbCount / Math.max(1, frames.length - 1);
+        nav.currentX =
+          stepT <= climbPortion
+            ? lerp(nav.bookStartX ?? this.entryX, this.cx, stepT / Math.max(0.01, climbPortion))
+            : lerp(
+                this.cx,
+                this.walkBookRightStart,
+                (stepT - climbPortion) / Math.max(0.01, 1 - climbPortion),
+              );
+      } else {
+        nav.currentX = lerp(nav.bookStartX ?? this.cx, this.walkBookRightStart, stepT);
+      }
+
+      if (nav.phaseT >= 1) {
+        this.facing = 1;
+        this.bookFacing = 1;
+        this.walkFrameCursor = 12;
+        nav.currentX = this.walkBookRightStart;
+        nav.walkStartX = this.walkBookRightStart;
+        nav.walkStartU = 0.67;
+        nav.phaseStartU = 0.67;
+        const feetYOff = this.manifest.bookSeq.exitFeetOffsetY * this.k;
+
+        if (Math.abs(nav.walkEndX - nav.walkStartX) <= 1.5) {
+          this.enterPostWalkPhase(nav);
+          return true;
+        }
+
+        nav.phase = 'walk';
+        nav.phaseT = 0;
+        nav.phaseDur = this.walkDurationForDistance(nav.walkEndX - nav.walkStartX);
+        nav.startYOffset = feetYOff;
+        nav.yOffset = feetYOff;
+      }
+      return true;
+    }
+
+    if (nav.phase === 'walk') {
+      if (this.maybeStartTurn(nav.dir)) return true;
+
+      if (this.u <= 0.33 || this.u >= 0.67) {
+        this.bookFacing = this.facing;
+      }
+
+      if (Math.abs(nav.walkEndX - nav.walkStartX) <= 1.5) {
+        nav.currentX = nav.walkEndX;
+        nav.yOffset = 0;
+        this.finishWalkPhase(nav);
+        return true;
+      }
+
+      nav.phaseT = Math.min(1, nav.phaseT + dt / nav.phaseDur);
+      const t = nav.phaseT;
+      const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      const prevX = nav.currentX;
+      const nextX = lerp(nav.walkStartX, nav.walkEndX, eased);
+      const dw = Math.abs(nextX - prevX) / Math.max(0.05, this.k);
+      const count = this.manifest.ranges.walk.count;
+      this.walkFrameCursor = (this.walkFrameCursor + (dw / WALK_STRIDE) * count) % count;
+
+      if (nav.startYOffset !== 0) {
+        const movedPx = Math.abs(nextX - nav.walkStartX);
+        const decaySpan = Math.max(60 * this.k, Math.abs(nav.walkEndX - nav.walkStartX) * 0.25);
+        nav.yOffset = nav.startYOffset * (1 - easeInOut(clamp01(movedPx / decaySpan)));
+      }
+
+      nav.currentX = nextX;
+      this.u = clamp01(lerp(nav.walkStartU, nav.walkEndU, eased));
+      this.updateLatchedSection(this.u, prevU);
+
+      if (nav.phaseT >= 1) {
+        nav.currentX = nav.walkEndX;
+        nav.yOffset = 0;
+        this.finishWalkPhase(nav);
+      }
+      return true;
+    }
+
+    // phase === 'sitDown'
+    nav.phaseT = Math.min(1, nav.phaseT + dt / nav.phaseDur);
+    this.u = clamp01(lerp(nav.sitFromU, nav.targetU, easeInOut(nav.phaseT)));
+    this.updateLatchedSection(this.u, prevU);
+    nav.currentX = nav.targetX;
+
+    if (nav.phaseT >= 1) {
+      this.u = nav.targetU;
+      this.latchedSection = nav.targetSection;
+      this.directNav = null;
+      this.groundOverride = null;
+    }
+    return true;
+  }
+
+  private finishWalkPhase(nav: DirectNavState) {
+    if (nav.resumeBookTargetSection !== undefined) {
+      const bookTargetU = SECTION_STOPS[nav.resumeBookTargetSection]!;
+      this.u = nav.walkEndU;
+      this.facing = this.u <= 0.34 ? 1 : -1;
+      this.bookFacing = this.facing;
+      this.directNav = null;
+      this.groundOverride = null;
+      this.startStandardGlide(bookTargetU);
+      return;
+    }
+    this.enterPostWalkPhase(nav);
+  }
+
+  private enterPostWalkPhase(nav: DirectNavState) {
+    this.sitHeadAnchorX = null;
+    if (nav.targetSection === 1 || nav.targetSection === 4) {
+      nav.phase = 'sitDown';
+      nav.phaseT = 0;
+      nav.phaseDur = GROUND_SIT_DOWN_DUR;
+      nav.sitFromU = nav.walkEndU;
+      nav.currentX = nav.targetX;
+      nav.yOffset = 0;
+      this.u = nav.walkEndU;
+      this.walkFrameCursor = 24;
+      return;
+    }
+    this.u = nav.targetU;
+    this.latchedSection = nav.targetSection;
+    this.directNav = null;
+    this.groundOverride = null;
+  }
+
+  private stepGroundOverrideWalk(prevU: number, nextU: number) {
+    const override = this.groundOverride;
+    if (!override || nextU === prevU) return;
+
+    const dir: 1 | -1 = nextU > prevU ? 1 : -1;
+    let rejoinU: number;
+    let rejoinX: number;
+
+    if (dir === 1) {
+      if (prevU < 0.14 && override.x <= this.leftStopX + 4) {
+        rejoinU = 0.14;
+        rejoinX = this.leftStopX;
+      } else if (prevU < 0.74) {
+        rejoinU = 0.74;
+        rejoinX = this.rightStopX;
+      } else {
+        rejoinU = 1;
+        rejoinX = this.offR;
+      }
+    } else if (prevU > 0.85 && override.x >= this.rightStopX - 4) {
+      rejoinU = 0.85;
+      rejoinX = this.rightStopX;
+    } else if (prevU > 0.25) {
+      rejoinU = 0.25;
+      rejoinX = this.leftStopX;
+    } else {
+      rejoinU = 0;
+      rejoinX = this.offL;
+    }
+
+    const frac = clamp01(Math.abs(nextU - prevU) / Math.max(0.001, Math.abs(rejoinU - prevU)));
+    const prevX = override.x;
+    const newX = lerp(prevX, rejoinX, frac);
+    const dw = Math.abs(newX - prevX) / Math.max(0.05, this.k);
+    const count = this.manifest.ranges.walk.count;
+    this.walkFrameCursor = (this.walkFrameCursor + (dw / WALK_STRIDE) * count) % count;
+    override.x = newX;
+
+    if ((dir === 1 && nextU >= rejoinU) || (dir === -1 && nextU <= rejoinU)) {
+      this.groundOverride = null;
+      if (nextU >= 0.74 || nextU <= 0.25) {
+        this.bookFacing = this.facing;
+      }
+    }
+  }
+
+  private maybeStartBookRightTurn(): boolean {
+    if (this.bookFacing === 1) return false;
+    const sq = this.manifest.sitSeq;
+    const isLie = this.u >= 0.475;
+    this.turn = {
+      kind: isLie ? 'bookLieTurn' : 'bookSit',
+      fromFacing: -1,
+      toFacing: 1,
+      turnT: 0,
+      baseFrame: sq.count - 1,
+      startHeadX: this.cx - sq.bookSitHeadOffsetX * this.k,
+      endHeadX: this.cx + sq.bookSitHeadOffsetX * this.k,
+      scale: sq.bookSitScale,
+      yOffset: sq.bookSitGroundOffsetY * this.k,
+      applyTarget: 'both',
+    };
+    return true;
+  }
+
   private desiredDirection(): 1 | -1 | 0 {
+    if (this.directNav) {
+      return this.directNav.phase === 'bookExitRight' ? 1 : this.directNav.dir;
+    }
     if (this.navGlide) {
       const d = this.navGlide.targetU - this.u;
       return Math.abs(d) > 0.0005 ? (d > 0 ? 1 : -1) : 0;
@@ -633,6 +1331,41 @@ export class DolyChoreography {
     const u = this.u;
     const sq = this.manifest.sitSeq;
     const headOff = sq.headOffsetX * this.k;
+
+    const groundX = this.activeGroundX();
+    if (groundX !== null) {
+      if (groundX <= this.offL + 4 || groundX >= this.offR - 4) {
+        this.facing = dir;
+        this.bookFacing = dir;
+        return false;
+      }
+      const inSeatedPhase =
+        this.directNav?.phase === 'standUp' || this.directNav?.phase === 'sitDown';
+      if (!inSeatedPhase) {
+        if (dir !== this.facing) {
+          this.turn = {
+            kind: 'midWalk',
+            fromFacing: this.facing,
+            toFacing: dir,
+            turnT: 0,
+            baseFrame: 4,
+            startHeadX: groundX + this.facing * headOff,
+            endHeadX: groundX + dir * headOff,
+            scale: 1,
+            yOffset: this.directNav?.yOffset ?? 0,
+            applyTarget: 'both',
+          };
+          return true;
+        }
+        return false;
+      }
+    }
+
+    if (u <= 0.002 || u >= 0.998) {
+      this.facing = dir;
+      this.bookFacing = dir;
+      return false;
+    }
 
     // 1. Sentada o girando en suelo alrededor de PARADA 1 (0.14..0.25) y PARADA 4 (0.74..0.85)
     if ((u >= 0.14 && u <= 0.25) || (u >= 0.74 && u <= 0.85)) {
@@ -756,7 +1489,9 @@ export class DolyChoreography {
   }
 
   private computeSitLayerX(baseStopX: number, facing: 1 | -1, sitT: number): number {
-    if (this.sitHeadAnchorX === null) return baseStopX;
+    if (this.sitHeadAnchorX === null || Math.abs(this.sitHeadAnchorX - baseStopX) > 160 * this.k) {
+      return baseStopX;
+    }
     const headAnchoredLayerX = this.sitHeadAnchorX - facing * this.manifest.sitSeq.headOffsetX * this.k;
     const tStand = clamp01(1 - (sitT - 0.09) / 0.91);
     return lerp(headAnchoredLayerX, baseStopX, easeInOut(tStand));
@@ -888,6 +1623,45 @@ export class DolyChoreography {
       sitA = turnOut.sitA;
       bookA = turnOut.bookA;
       dogX = sitA ? sitA.x : this.cx;
+    } else if (this.directNav) {
+      const nav = this.directNav;
+      if (nav.phase === 'standUp' || nav.phase === 'sitDown') {
+        const sitT =
+          nav.phase === 'standUp'
+            ? clamp01(lerp(nav.standStartSitT, 0, nav.phaseT))
+            : clamp01(nav.phaseT);
+        ({ walk, sitA, dogX } = this.renderGroundSit(
+          nav.currentX,
+          sitT,
+          this.facing,
+          this.manifest.ranges.walk.start + 24,
+        ));
+      } else if (nav.phase === 'bookExitRight') {
+        const frames = nav.stepFrames ?? this.stepOffRightFrames;
+        const t = clamp01(nav.phaseT);
+        if (t > 0.96) {
+          walk = {
+            x: this.walkBookRightStart,
+            frame: this.manifest.ranges.walk.start + 12,
+            facing: 1,
+            alpha: 1,
+            shadow: 1,
+            yOffset: b.exitFeetOffsetY * this.k,
+          };
+          dogX = this.walkBookRightStart;
+        } else {
+          const stepT = clamp01(t / 0.96);
+          const idx = Math.min(frames.length - 1, Math.round(stepT * (frames.length - 1)));
+          bookA = { frame: frames[idx], alpha: 1, flip: 1 };
+          dogX = nav.currentX;
+        }
+      } else {
+        dogX = nav.currentX;
+        walk = { x: dogX, frame: walkFrame, facing: this.facing, alpha: 1, shadow: 1, yOffset: nav.yOffset };
+      }
+    } else if (this.groundOverride) {
+      dogX = this.groundOverride.x;
+      walk = { x: dogX, frame: walkFrame, facing: this.facing, alpha: 1, shadow: 1, yOffset: 0 };
     } else if (u <= 0.0005) {
       dogX = this.offL;
     } else if (u < 0.14) {
